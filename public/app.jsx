@@ -498,7 +498,7 @@ function JobDetail({ job, onBack, onUpdateStatus }) {
 // NEW LEAD FORM
 // ============================================================
 function NewLeadScreen({ onBack, onSave }) {
-  const [form, setForm] = useState({ name: "", phone: "", email: "", address: "", source: "website", contact_preference: "text", stump_count: "", notes: "" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", address: "", source: "website", source_other: "", contact_preference: "text", notes: "" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
@@ -508,9 +508,10 @@ function NewLeadScreen({ onBack, onSave }) {
     if (!form.name) return;
     setSaving(true);
     try {
+      const finalSource = form.source === "other" ? (form.source_other || "other") : form.source;
       const res = await fetch(`${API_BASE}/leads`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, stump_count: form.stump_count ? parseInt(form.stump_count) : null }),
+        body: JSON.stringify({ ...form, source: finalSource }),
       });
       const lead = await res.json();
       onSave(lead);
@@ -526,14 +527,18 @@ function NewLeadScreen({ onBack, onSave }) {
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
         <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
-        <div><label style={labelStyle}>Stump Count</label><input style={inputStyle} type="number" value={form.stump_count} onChange={e => set("stump_count", e.target.value)} placeholder="0" /></div>
         <div>
           <label style={labelStyle}>Source</label>
           <select style={inputStyle} value={form.source} onChange={e => set("source", e.target.value)}>
             <option value="website">Website</option>
+            <option value="google">Google</option>
             <option value="facebook">Facebook</option>
             <option value="instagram">Instagram</option>
+            <option value="other">Other</option>
           </select>
+          {form.source === "other" && (
+            <input style={{ ...inputStyle, marginTop: "8px" }} value={form.source_other} onChange={e => set("source_other", e.target.value)} placeholder="Where did they hear about you?" />
+          )}
         </div>
         <div>
           <label style={labelStyle}>Contact Preference</label>
