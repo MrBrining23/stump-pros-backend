@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
+const { createInvoiceForJob } = require('../services/quickbooks');
 
 // GET /api/jobs
 router.get('/', async (req, res) => {
@@ -68,10 +69,39 @@ router.patch('/:id/status', async (req, res) => {
 
     const result = await pool.query(query, params);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Job not found' });
-    res.json(result.rows[0]);
+    const job = result.rows[0];
+
+    // Auto-create QB invoice when job is marked as invoiced
+    if (status === 'invoiced') {
+      createInvoiceForJob(job.id).then(invoice => {
+        console.log(`QB invoice created for job ${job.id}: invoice #${invoice.invoice_id}`);
+      }).catch(err => {
+        console.error(`QB auto-invoice failed for job ${job.id}:`, err.message);
+      });
+    }
+
+    res.json(job);
   } catch (err) {
     console.error('PATCH /api/jobs/:id/status error:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/jobs/:id/invoice — manual QB invoice trigger
+router.post('/:id/invoice', async (req, res) => {
+  const jobId = req.params.id;
+  try {
+    const result = await createInvoiceForJob(jobId);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    if (err.message.includes('not connected')) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    console.error(`POST /api/jobs/${jobId}/invoice error:`, err.Fault || err.message);
+    res.status(500).json({ error: err.message, detail: err.Fault });
   }
 });
 
