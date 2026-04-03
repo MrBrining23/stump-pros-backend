@@ -38,7 +38,11 @@ CREATE TABLE IF NOT EXISTS settings (
   auto_text TEXT DEFAULT 'Hey {{name}}, thanks for reaching out to Stump Pros WV! How many stumps do you need removed?',
   review_delay INTEGER DEFAULT 24,
   google_review_url TEXT,
-  facebook_review_url TEXT
+  facebook_review_url TEXT,
+  qb_access_token TEXT,
+  qb_refresh_token TEXT,
+  qb_realm_id TEXT,
+  qb_token_expires_at TIMESTAMPTZ
 );
 
 INSERT INTO settings (id) VALUES (1) ON CONFLICT DO NOTHING;
