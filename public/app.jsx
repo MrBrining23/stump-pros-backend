@@ -830,6 +830,7 @@ function StumpProsApp() {
   const [leads, setLeads] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
 
   const navigate = useCallback((target, item = null) => {
     setScreen(target);
@@ -837,15 +838,22 @@ function StumpProsApp() {
   }, []);
 
   const loadData = useCallback(async () => {
+    setLoadError(null);
     try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
       const [leadsRes, jobsRes] = await Promise.all([
-        fetch(`${API_BASE}/leads`),
-        fetch(`${API_BASE}/jobs`),
+        fetch(`${API_BASE}/leads`, { signal: controller.signal }),
+        fetch(`${API_BASE}/jobs`, { signal: controller.signal }),
       ]);
-      setLeads(await leadsRes.json());
-      setJobs(await jobsRes.json());
+      clearTimeout(timer);
+      if (!leadsRes.ok || !jobsRes.ok) throw new Error(`Server error ${leadsRes.status}`);
+      const [leadsData, jobsData] = await Promise.all([leadsRes.json(), jobsRes.json()]);
+      setLeads(Array.isArray(leadsData) ? leadsData : []);
+      setJobs(Array.isArray(jobsData) ? jobsData : []);
     } catch (err) {
       console.error("Load error:", err);
+      setLoadError(err.name === "AbortError" ? "Server took too long to respond. Tap retry." : "Couldn't connect to server. Tap retry.");
     } finally {
       setLoading(false);
     }
@@ -897,6 +905,18 @@ function StumpProsApp() {
     return (
       <div style={{ minHeight: "100vh", background: COLORS.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ color: COLORS.textMuted, fontSize: "14px" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div style={{ minHeight: "100vh", background: COLORS.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", padding: "24px" }}>
+        <div style={{ color: COLORS.red, fontSize: "15px", textAlign: "center" }}>{loadError}</div>
+        <button onClick={() => { setLoading(true); loadData(); }}
+          style={{ background: COLORS.accent, color: "#000", border: "none", borderRadius: "8px", padding: "10px 24px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+          Retry
+        </button>
       </div>
     );
   }
