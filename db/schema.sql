@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
-  auto_text TEXT DEFAULT 'Hey {{name}}, thanks for reaching out to Stump Pros WV! How many stumps do you need removed?',
+  auto_text TEXT DEFAULT 'Hi {{name}}, thank you for reaching out to Stump Pros WV! We''ve received your message and will be in touch with you shortly.',
   review_delay INTEGER DEFAULT 24,
   google_review_url TEXT,
   facebook_review_url TEXT,
@@ -46,3 +46,47 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 INSERT INTO settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS estimate_discount_pct INTEGER DEFAULT 10;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS estimate_intro_msg TEXT DEFAULT 'Hi {name}, here is your estimate from Stump Pros WV:';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS estimate_discount_msg TEXT DEFAULT 'We''d still love to earn your business! Here''s a special discounted offer just for you:';
+
+CREATE TABLE IF NOT EXISTS estimates (
+  id SERIAL PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  customer_name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  description TEXT,
+  amount NUMERIC(10,2),
+  discount_pct INTEGER DEFAULT 0,
+  discounted_amount NUMERIC(10,2),
+  status TEXT DEFAULT 'pending',
+  approval_token UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+  discount_token UUID DEFAULT gen_random_uuid() UNIQUE NOT NULL,
+  notes TEXT,
+  sent_at TIMESTAMPTZ,
+  responded_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id SERIAL PRIMARY KEY,
+  job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+  estimate_id INTEGER REFERENCES estimates(id) ON DELETE SET NULL,
+  customer_name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  line_items JSONB DEFAULT '[]',
+  subtotal NUMERIC(10,2) DEFAULT 0,
+  tax_pct NUMERIC(5,2) DEFAULT 0,
+  tax_amount NUMERIC(10,2) DEFAULT 0,
+  total NUMERIC(10,2) DEFAULT 0,
+  status TEXT DEFAULT 'draft',
+  qb_invoice_id TEXT,
+  qb_invoice_url TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
