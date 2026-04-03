@@ -11,6 +11,8 @@ const settingsRouter = require('./routes/settings');
 const smsRouter = require('./routes/sms');
 const quickbooksRouter = require('./routes/quickbooks');
 const webhooksRouter = require('./routes/webhooks');
+const { estimatesRouter, responseRouter } = require('./routes/estimates');
+const invoicesRouter = require('./routes/invoices');
 const { startCronJobs } = require('./services/cron');
 
 const app = express();
@@ -31,6 +33,12 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/sms', smsRouter);
 app.use('/api/quickbooks', quickbooksRouter);
 app.use('/api/webhooks', webhooksRouter);
+app.use('/api/estimates', estimatesRouter);
+app.use('/api/estimate-response', responseRouter);
+app.use('/api/invoices', invoicesRouter);
+
+// Customer-facing estimate approval page
+app.get('/estimate/:token', (req, res) => res.sendFile(path.join(__dirname, 'public', 'estimate.html')));
 
 // 404 handler
 app.use((req, res) => {

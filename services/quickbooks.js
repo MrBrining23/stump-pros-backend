@@ -145,4 +145,50 @@ async function createInvoiceForJob(jobId) {
   };
 }
 
-module.exports = { getOAuthClient, getValidToken, createInvoiceForJob };
+// Create a QB invoice from arbitrary invoice data (not tied to a job row)
+async function createInvoiceFromData({ customer_name, email, phone, address, line_items = [], tax_pct = 0, notes }) {
+  const { qbo } = await getValidToken();
+
+  const customerData = { customer_name, email, phone, address };
+  const customerId = await findOrCreateCustomer(qbo, customerData);
+
+  const lines = line_items.map(item => {
+    const qty = parseFloat(item.quantity) || 1;
+    const price = parseFloat(item.unit_price) || 0;
+    return {
+      Amount: Math.round(qty * price * 100) / 100,
+      DetailType: 'SalesItemLineDetail',
+      Description: item.description || 'Services',
+      SalesItemLineDetail: {
+        ItemRef: { value: '1', name: 'Services' },
+        UnitPrice: price,
+        Qty: qty,
+      },
+    };
+  });
+
+  if (notes) {
+    lines.push({ DetailType: 'DescriptionOnly', Description: notes, Amount: 0 });
+  }
+
+  const invoice = { CustomerRef: { value: customerId }, Line: lines };
+
+  return new Promise((resolve, reject) => {
+    qbo.createInvoice(invoice, (err, created) => {
+      if (err) return reject(err);
+      const isSandbox = (process.env.QB_ENVIRONMENT || 'sandbox') === 'sandbox';
+      const baseUrl = isSandbox
+        ? 'https://app.sandbox.qbo.intuit.com/app/invoice'
+        : 'https://app.qbo.intuit.com/app/invoice';
+      resolve({
+        invoice_id: created.Id,
+        invoice_number: created.DocNumber,
+        amount: created.TotalAmt,
+        customer_id: customerId,
+        deep_link: `${baseUrl}?txnId=${created.Id}`,
+      });
+    });
+  });
+}
+
+module.exports = { getOAuthClient, getValidToken, createInvoiceForJob, createInvoiceFromData };

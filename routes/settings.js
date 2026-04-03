@@ -15,7 +15,10 @@ router.get('/', async (req, res) => {
 
 // PUT /api/settings
 router.put('/', async (req, res) => {
-  const { auto_text, review_delay, google_review_url, facebook_review_url } = req.body;
+  const {
+    auto_text, review_delay, google_review_url, facebook_review_url,
+    estimate_discount_pct, estimate_intro_msg, estimate_discount_msg,
+  } = req.body;
 
   try {
     const result = await pool.query(
@@ -23,10 +26,14 @@ router.put('/', async (req, res) => {
        SET auto_text = COALESCE($1, auto_text),
            review_delay = COALESCE($2, review_delay),
            google_review_url = COALESCE($3, google_review_url),
-           facebook_review_url = COALESCE($4, facebook_review_url)
+           facebook_review_url = COALESCE($4, facebook_review_url),
+           estimate_discount_pct = COALESCE($5, estimate_discount_pct),
+           estimate_intro_msg = COALESCE($6, estimate_intro_msg),
+           estimate_discount_msg = COALESCE($7, estimate_discount_msg)
        WHERE id = 1
        RETURNING *`,
-      [auto_text, review_delay, google_review_url, facebook_review_url]
+      [auto_text, review_delay, google_review_url, facebook_review_url,
+       estimate_discount_pct, estimate_intro_msg, estimate_discount_msg]
     );
     res.json(result.rows[0]);
   } catch (err) {

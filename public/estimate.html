@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Estimate — Stump Pros WV</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a1a;
+      color: #e8e4de;
+      font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px 16px 48px;
+    }
+    .container { width: 100%; max-width: 480px; }
+    .logo {
+      font-size: 28px; font-weight: 900; letter-spacing: -1px;
+      color: #e8e4de; margin-bottom: 8px;
+    }
+    .logo span { color: #c4a43e; }
+    .tagline { font-size: 13px; color: #8a8580; margin-bottom: 32px; }
+    .card {
+      background: #242424;
+      border: 1px solid #383838;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 14px;
+    }
+    .label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.6px; color: #5c5954; margin-bottom: 6px;
+    }
+    .value { font-size: 15px; color: #e8e4de; line-height: 1.5; }
+    .amount {
+      font-size: 36px; font-weight: 900; color: #c4a43e;
+      letter-spacing: -1px; margin-top: 4px;
+    }
+    .amount-label { font-size: 12px; color: #8a8580; }
+    .discount-badge {
+      display: inline-block; background: #2d4d7a40; color: #4a7ec4;
+      border: 1px solid #4a7ec430; border-radius: 4px;
+      font-size: 11px; font-weight: 700; padding: 3px 10px;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+    }
+    .btn {
+      width: 100%; padding: 16px; border-radius: 10px; border: none;
+      font-size: 16px; font-weight: 800; cursor: pointer;
+      letter-spacing: 0.3px; transition: opacity 0.15s; margin-bottom: 10px;
+    }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .btn-approve { background: #4a9e6d; color: #fff; }
+    .btn-decline { background: #242424; color: #8a8580; border: 1px solid #383838; }
+    .btn-discount { background: #4a7ec4; color: #fff; }
+    .status-message {
+      text-align: center; padding: 32px 16px;
+      font-size: 18px; font-weight: 700; line-height: 1.5;
+    }
+    .status-message .icon { font-size: 48px; display: block; margin-bottom: 16px; }
+    .status-message .sub { font-size: 14px; color: #8a8580; font-weight: 400; margin-top: 8px; }
+    .loading { text-align: center; color: #8a8580; padding: 60px 0; font-size: 14px; }
+    .error { color: #c4503e; text-align: center; padding: 32px 0; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">Stump Pros<span> WV</span></div>
+    <div class="tagline">Professional Stump Removal</div>
+
+    <div id="app">
+      <div class="loading">Loading your estimate…</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api';
+    const token = window.location.pathname.split('/').pop();
+
+    let estimateData = null;
+
+    async function loadEstimate() {
+      try {
+        const res = await fetch(`${API_BASE}/estimate-response/${token}`);
+        if (!res.ok) throw new Error('Not found');
+        estimateData = await res.json();
+        render();
+      } catch (e) {
+        document.getElementById('app').innerHTML =
+          '<div class="error">This estimate link is invalid or has expired.</div>';
+      }
+    }
+
+    function fmt(amount) {
+      if (!amount) return '$0';
+      return '$' + Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function render() {
+      const { customer_name, address, description, amount, discounted_amount, discount_pct, status, notes } = estimateData;
+      const app = document.getElementById('app');
+
+      if (status === 'approved' || status === 'discount_approved') {
+        app.innerHTML = `
+          <div class="status-message">
+            <span class="icon">✅</span>
+            Estimate Approved
+            <div class="sub">We'll be in touch soon to schedule your service!</div>
+          </div>`;
+        return;
+      }
+
+      if (status === 'declined') {
+        app.innerHTML = `
+          <div class="status-message">
+            <span class="icon">💌</span>
+            We're sorry to see you go.
+            <div class="sub">Check your messages — we may have a special offer for you!</div>
+          </div>`;
+        return;
+      }
+
+      if (status === 'expired') {
+        app.innerHTML = `
+          <div class="status-message">
+            <span class="icon">⌛</span>
+            This estimate has expired.
+            <div class="sub">Please contact us for a new quote.</div>
+          </div>`;
+        return;
+      }
+
+      const isDiscount = status === 'discount_offered';
+
+      let html = `
+        <div class="card">
+          <div class="label">Prepared for</div>
+          <div class="value" style="font-weight:700;font-size:18px;">${customer_name}</div>
+          ${address ? `<div class="value" style="margin-top:4px;color:#8a8580;font-size:13px;">📍 ${address}</div>` : ''}
+        </div>`;
+
+      if (description) {
+        html += `
+          <div class="card">
+            <div class="label">Service Description</div>
+            <div class="value">${description}</div>
+          </div>`;
+      }
+
+      if (notes) {
+        html += `
+          <div class="card">
+            <div class="label">Notes</div>
+            <div class="value">${notes}</div>
+          </div>`;
+      }
+
+      if (isDiscount) {
+        html += `
+          <div class="card">
+            <div class="discount-badge">✨ Special Offer — ${discount_pct}% Off</div>
+            <div class="label">Discounted Total</div>
+            <div class="amount">${fmt(discounted_amount)}</div>
+            <div class="amount-label" style="text-decoration:line-through;margin-top:4px;">Was ${fmt(amount)}</div>
+          </div>
+          <button class="btn btn-discount" onclick="handleApproveDiscount()">✅ Accept Special Offer</button>`;
+      } else {
+        html += `
+          <div class="card">
+            <div class="label">Estimate Total</div>
+            <div class="amount">${fmt(amount)}</div>
+          </div>
+          <button class="btn btn-approve" onclick="handleApprove()">✅ Approve Estimate</button>
+          <button class="btn btn-decline" onclick="handleDecline()">❌ Decline</button>`;
+      }
+
+      app.innerHTML = html;
+    }
+
+    async function handleApprove() {
+      setButtons(true);
+      try {
+        const res = await fetch(`${API_BASE}/estimate-response/${token}/approve`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed');
+        estimateData.status = 'approved';
+        render();
+      } catch {
+        setButtons(false);
+        alert('Something went wrong. Please try again.');
+      }
+    }
+
+    async function handleDecline() {
+      if (!confirm('Are you sure you want to decline this estimate?')) return;
+      setButtons(true);
+      try {
+        const res = await fetch(`${API_BASE}/estimate-response/${token}/decline`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed');
+        // Reload to show discount offer if sent
+        await loadEstimate();
+      } catch {
+        setButtons(false);
+        alert('Something went wrong. Please try again.');
+      }
+    }
+
+    async function handleApproveDiscount() {
+      setButtons(true);
+      try {
+        const res = await fetch(`${API_BASE}/estimate-response/${token}/approve-discount`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed');
+        estimateData.status = 'discount_approved';
+        render();
+      } catch {
+        setButtons(false);
+        alert('Something went wrong. Please try again.');
+      }
+    }
+
+    function setButtons(disabled) {
+      document.querySelectorAll('.btn').forEach(b => b.disabled = disabled);
+    }
+
+    loadEstimate();
+  </script>
+</body>
+</html>

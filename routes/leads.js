@@ -48,7 +48,7 @@ router.post('/', async (req, res) => {
         const settings = settingsResult.rows[0];
         if (settings && settings.auto_text) {
           const firstName = name.split(' ')[0];
-          const message = settings.auto_text.replace('{{name}}', firstName);
+          const message = settings.auto_text.replace('{{name}}', firstName).replace('{name}', firstName);
           await sendSMS(phone, message);
           await pool.query(
             'UPDATE leads SET auto_contacted = TRUE, auto_contacted_at = NOW() WHERE id = $1',

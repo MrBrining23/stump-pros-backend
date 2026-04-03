@@ -29,20 +29,34 @@ const COLORS = {
   blueDim: "#2d4d7a",
   orange: "#c4803e",
   orangeDim: "#7a5028",
+  purple: "#9b59b6",
+  purpleDim: "#5d3572",
 };
 
 const STATUS_CONFIG = {
+  // Lead statuses
   new: { label: "New", color: COLORS.accent, bg: COLORS.accentDim + "40" },
   contacted: { label: "Contacted", color: COLORS.blue, bg: COLORS.blueDim + "40" },
   quoted: { label: "Quoted", color: COLORS.orange, bg: COLORS.orangeDim + "40" },
   converted: { label: "Converted", color: COLORS.green, bg: COLORS.greenDim + "40" },
   lost: { label: "Lost", color: COLORS.red, bg: COLORS.redDim + "40" },
+  // Job statuses
   estimate: { label: "Estimate", color: COLORS.textMuted, bg: COLORS.border + "60" },
   scheduled: { label: "Scheduled", color: COLORS.blue, bg: COLORS.blueDim + "40" },
   in_progress: { label: "In Progress", color: COLORS.orange, bg: COLORS.orangeDim + "40" },
   completed: { label: "Completed", color: COLORS.green, bg: COLORS.greenDim + "40" },
   invoiced: { label: "Invoiced", color: COLORS.accent, bg: COLORS.accentDim + "40" },
   paid: { label: "Paid", color: COLORS.green, bg: COLORS.greenDim + "40" },
+  // Estimate (quote) statuses
+  pending: { label: "Pending", color: COLORS.accent, bg: COLORS.accentDim + "40" },
+  approved: { label: "Approved", color: COLORS.green, bg: COLORS.greenDim + "40" },
+  declined: { label: "Declined", color: COLORS.red, bg: COLORS.redDim + "40" },
+  discount_offered: { label: "Offer Sent", color: COLORS.blue, bg: COLORS.blueDim + "40" },
+  discount_approved: { label: "Disc. Approved", color: COLORS.green, bg: COLORS.greenDim + "40" },
+  expired: { label: "Expired", color: COLORS.textMuted, bg: COLORS.border + "60" },
+  // Invoice statuses
+  draft: { label: "Draft", color: COLORS.textMuted, bg: COLORS.border + "60" },
+  sent: { label: "Sent", color: COLORS.blue, bg: COLORS.blueDim + "40" },
 };
 
 const PACKAGES = {
@@ -82,8 +96,8 @@ function formatTime(timeStr) {
 }
 
 function formatCurrency(amount) {
-  if (!amount) return "$0";
-  return `$${Number(amount).toLocaleString()}`;
+  if (!amount && amount !== 0) return "$0";
+  return `$${Number(amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // ============================================================
@@ -106,17 +120,17 @@ function IconButton({ icon, label, onClick, active, badge }) {
   return (
     <button onClick={onClick} style={{
       display: "flex", flexDirection: "column", alignItems: "center", gap: "2px",
-      background: "none", border: "none", padding: "8px 12px", cursor: "pointer",
+      background: "none", border: "none", padding: "8px 10px", cursor: "pointer",
       color: active ? COLORS.accent : COLORS.textMuted, position: "relative",
       transition: "color 0.15s",
     }}>
-      <span style={{ fontSize: "22px", lineHeight: 1 }}>{icon}</span>
-      <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.3px" }}>{label}</span>
+      <span style={{ fontSize: "20px", lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: "9px", fontWeight: 600, letterSpacing: "0.3px" }}>{label}</span>
       {badge > 0 && (
         <span style={{
-          position: "absolute", top: "2px", right: "4px", width: "18px", height: "18px",
+          position: "absolute", top: "2px", right: "2px", width: "16px", height: "16px",
           borderRadius: "50%", background: COLORS.red, color: "#fff",
-          fontSize: "10px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "9px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
         }}>{badge}</span>
       )}
     </button>
@@ -132,7 +146,7 @@ function Card({ children, onClick, style }) {
       ...style,
     }}
     onMouseEnter={e => { if (onClick) { e.currentTarget.style.borderColor = COLORS.borderLight; e.currentTarget.style.background = COLORS.surfaceHover; }}}
-    onMouseLeave={e => { if (onClick) { e.currentTarget.style.borderColor = style && style.borderColor ? style.borderColor : COLORS.border; e.currentTarget.style.background = COLORS.surface; }}}
+    onMouseLeave={e => { if (onClick) { e.currentTarget.style.borderColor = (style && style.borderColor) ? style.borderColor : COLORS.border; e.currentTarget.style.background = COLORS.surface; }}}
     >
       {children}
     </div>
@@ -190,11 +204,6 @@ function LeadCard({ lead, onClick }) {
           <span style={{ opacity: 0.6 }}>📍</span> {lead.address}
         </div>
       )}
-      {lead.stump_count && (
-        <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "2px" }}>
-          🪵 {lead.stump_count} stump{lead.stump_count > 1 ? "s" : ""}
-        </div>
-      )}
       {lead.auto_contacted && (
         <div style={{ fontSize: "11px", color: COLORS.green, marginTop: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
           ✓ Auto-responded {lead.auto_contacted_at ? timeAgo(lead.auto_contacted_at) : ""}
@@ -236,6 +245,67 @@ function JobCard({ job, onClick }) {
 }
 
 // ============================================================
+// ESTIMATE CARD
+// ============================================================
+function EstimateCard({ estimate, onClick }) {
+  const statusColor = {
+    pending: COLORS.accent,
+    approved: COLORS.green,
+    declined: COLORS.red,
+    discount_offered: COLORS.blue,
+    discount_approved: COLORS.green,
+    expired: COLORS.textMuted,
+  }[estimate.status] || COLORS.textMuted;
+
+  return (
+    <Card onClick={onClick}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+        <div>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: COLORS.text }}>{estimate.customer_name}</div>
+          {estimate.address && <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "2px" }}>📍 {estimate.address}</div>}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+          <StatusBadge status={estimate.status} />
+          <span style={{ fontSize: "13px", fontWeight: 700, color: COLORS.accent }}>{formatCurrency(estimate.amount)}</span>
+        </div>
+      </div>
+      {estimate.description && (
+        <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {estimate.description}
+        </div>
+      )}
+      <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "6px" }}>
+        {estimate.sent_at ? `Sent ${timeAgo(estimate.sent_at)}` : `Created ${timeAgo(estimate.created_at)}`}
+      </div>
+    </Card>
+  );
+}
+
+// ============================================================
+// INVOICE CARD
+// ============================================================
+function InvoiceCard({ invoice, onClick }) {
+  return (
+    <Card onClick={onClick}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+        <div>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: COLORS.text }}>{invoice.customer_name}</div>
+          {invoice.address && <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "2px" }}>📍 {invoice.address}</div>}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+          <StatusBadge status={invoice.status} />
+          <span style={{ fontSize: "13px", fontWeight: 700, color: COLORS.accent }}>{formatCurrency(invoice.total)}</span>
+        </div>
+      </div>
+      {invoice.qb_invoice_id && (
+        <div style={{ fontSize: "11px", color: COLORS.green, marginTop: "4px" }}>✓ Synced to QuickBooks</div>
+      )}
+      <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "4px" }}>{timeAgo(invoice.created_at)}</div>
+    </Card>
+  );
+}
+
+// ============================================================
 // LEAD DETAIL VIEW
 // ============================================================
 function LeadDetail({ lead, onBack, onConvert, onUpdateStatus }) {
@@ -269,55 +339,27 @@ function LeadDetail({ lead, onBack, onConvert, onUpdateStatus }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
         {lead.phone && (
-          <a href={`tel:${lead.phone}`} style={{
-            display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px",
-            background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`,
-            color: COLORS.text, textDecoration: "none", fontSize: "14px",
-          }}>
+          <a href={`tel:${lead.phone}`} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, color: COLORS.text, textDecoration: "none", fontSize: "14px" }}>
             <span style={{ fontSize: "18px" }}>📞</span>
-            <div>
-              <div style={{ fontWeight: 600 }}>{lead.phone}</div>
-              <div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap to call</div>
-            </div>
+            <div><div style={{ fontWeight: 600 }}>{lead.phone}</div><div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap to call</div></div>
           </a>
         )}
         {lead.phone && (
-          <a href={`sms:${lead.phone}`} style={{
-            display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px",
-            background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`,
-            color: COLORS.text, textDecoration: "none", fontSize: "14px",
-          }}>
+          <a href={`sms:${lead.phone}`} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, color: COLORS.text, textDecoration: "none", fontSize: "14px" }}>
             <span style={{ fontSize: "18px" }}>💬</span>
-            <div>
-              <div style={{ fontWeight: 600 }}>Send a text</div>
-              <div style={{ fontSize: "11px", color: COLORS.textMuted }}>Opens Messages app</div>
-            </div>
+            <div><div style={{ fontWeight: 600 }}>Send a text</div><div style={{ fontSize: "11px", color: COLORS.textMuted }}>Opens Messages app</div></div>
           </a>
         )}
         {lead.email && (
-          <a href={`mailto:${lead.email}`} style={{
-            display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px",
-            background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`,
-            color: COLORS.text, textDecoration: "none", fontSize: "14px",
-          }}>
+          <a href={`mailto:${lead.email}`} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, color: COLORS.text, textDecoration: "none", fontSize: "14px" }}>
             <span style={{ fontSize: "18px" }}>📧</span>
-            <div>
-              <div style={{ fontWeight: 600 }}>{lead.email}</div>
-              <div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap to email</div>
-            </div>
+            <div><div style={{ fontWeight: 600 }}>{lead.email}</div><div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap to email</div></div>
           </a>
         )}
         {lead.address && (
-          <a href={`https://maps.google.com/?q=${encodeURIComponent(lead.address)}`} target="_blank" rel="noopener noreferrer" style={{
-            display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px",
-            background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`,
-            color: COLORS.text, textDecoration: "none", fontSize: "14px",
-          }}>
+          <a href={`https://maps.google.com/?q=${encodeURIComponent(lead.address)}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, color: COLORS.text, textDecoration: "none", fontSize: "14px" }}>
             <span style={{ fontSize: "18px" }}>📍</span>
-            <div>
-              <div style={{ fontWeight: 600 }}>{lead.address}</div>
-              <div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap for directions</div>
-            </div>
+            <div><div style={{ fontWeight: 600 }}>{lead.address}</div><div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap for directions</div></div>
           </a>
         )}
       </div>
@@ -371,7 +413,7 @@ function LeadDetail({ lead, onBack, onConvert, onUpdateStatus }) {
 // ============================================================
 // JOB DETAIL VIEW
 // ============================================================
-function JobDetail({ job, onBack, onUpdateStatus }) {
+function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate }) {
   const [status, setStatus] = useState(job.status);
   const statuses = ["estimate", "scheduled", "in_progress", "completed", "invoiced", "paid"];
 
@@ -415,29 +457,15 @@ function JobDetail({ job, onBack, onUpdateStatus }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
         {job.phone && (
-          <a href={`tel:${job.phone}`} style={{
-            display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px",
-            background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`,
-            color: COLORS.text, textDecoration: "none", fontSize: "14px",
-          }}>
+          <a href={`tel:${job.phone}`} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, color: COLORS.text, textDecoration: "none", fontSize: "14px" }}>
             <span style={{ fontSize: "18px" }}>📞</span>
-            <div>
-              <div style={{ fontWeight: 600 }}>{job.phone}</div>
-              <div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap to call</div>
-            </div>
+            <div><div style={{ fontWeight: 600 }}>{job.phone}</div><div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap to call</div></div>
           </a>
         )}
         {job.address && (
-          <a href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`} target="_blank" rel="noopener noreferrer" style={{
-            display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px",
-            background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`,
-            color: COLORS.text, textDecoration: "none", fontSize: "14px",
-          }}>
+          <a href={`https://maps.google.com/?q=${encodeURIComponent(job.address)}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, color: COLORS.text, textDecoration: "none", fontSize: "14px" }}>
             <span style={{ fontSize: "18px" }}>📍</span>
-            <div>
-              <div style={{ fontWeight: 600 }}>{job.address}</div>
-              <div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap for directions</div>
-            </div>
+            <div><div style={{ fontWeight: 600 }}>{job.address}</div><div style={{ fontSize: "11px", color: COLORS.textMuted }}>Tap for directions</div></div>
           </a>
         )}
       </div>
@@ -490,6 +518,205 @@ function JobDetail({ job, onBack, onUpdateStatus }) {
           </div>
         </Card>
       )}
+
+      <button onClick={() => onSendEstimate(job)} style={{
+        width: "100%", padding: "13px", borderRadius: "8px", border: `1px solid ${COLORS.accentDim}`,
+        background: "transparent", color: COLORS.accent, fontSize: "14px", fontWeight: 700,
+        cursor: "pointer", marginTop: "8px",
+      }}>
+        📋 Send Estimate
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// ESTIMATE DETAIL VIEW (admin)
+// ============================================================
+function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh }) {
+  const [sending, setSending] = useState(false);
+  const [localStatus, setLocalStatus] = useState(estimate.status);
+
+  const handleSendDiscount = async () => {
+    if (!confirm("Send a discount offer SMS to this customer?")) return;
+    setSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/estimates/${estimate.id}/send-discount`, { method: "POST" });
+      const data = await res.json();
+      setLocalStatus(data.status || "discount_offered");
+      onRefresh && onRefresh();
+    } catch (err) {
+      alert("Failed to send discount: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const canSendDiscount = ["pending", "declined", "discount_offered"].includes(localStatus);
+  const canCreateInvoice = ["approved", "discount_approved"].includes(localStatus);
+
+  return (
+    <div>
+      <button onClick={onBack} style={{
+        background: "none", border: "none", color: COLORS.accent, cursor: "pointer",
+        fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px",
+      }}>
+        ← Back to Billing
+      </button>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+        <div>
+          <h2 style={{ fontSize: "22px", fontWeight: 800, color: COLORS.text, margin: 0, letterSpacing: "-0.5px" }}>{estimate.customer_name}</h2>
+          {estimate.address && <div style={{ color: COLORS.textMuted, fontSize: "13px", marginTop: "4px" }}>📍 {estimate.address}</div>}
+        </div>
+        <StatusBadge status={localStatus} />
+      </div>
+
+      <Card style={{ marginBottom: "12px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Estimate Amount</div>
+        <div style={{ fontSize: "28px", fontWeight: 900, color: COLORS.accent, letterSpacing: "-1px" }}>{formatCurrency(estimate.amount)}</div>
+        {estimate.discounted_amount && (
+          <div style={{ fontSize: "13px", color: COLORS.blue, marginTop: "4px" }}>
+            Discount offer: {formatCurrency(estimate.discounted_amount)} ({estimate.discount_pct}% off)
+          </div>
+        )}
+      </Card>
+
+      {estimate.description && (
+        <Card style={{ marginBottom: "12px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Description</div>
+          <div style={{ fontSize: "14px", color: COLORS.text, lineHeight: 1.5 }}>{estimate.description}</div>
+        </Card>
+      )}
+
+      {estimate.notes && (
+        <Card style={{ marginBottom: "12px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Notes</div>
+          <div style={{ fontSize: "14px", color: COLORS.text, lineHeight: 1.5 }}>{estimate.notes}</div>
+        </Card>
+      )}
+
+      <Card style={{ marginBottom: "20px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Timeline</div>
+        {estimate.sent_at && <div style={{ fontSize: "13px", color: COLORS.textMuted, marginBottom: "4px" }}>📤 Sent {timeAgo(estimate.sent_at)}</div>}
+        {estimate.responded_at && <div style={{ fontSize: "13px", color: COLORS.textMuted }}>💬 Responded {timeAgo(estimate.responded_at)}</div>}
+        {!estimate.sent_at && <div style={{ fontSize: "13px", color: COLORS.textDim }}>Not yet sent</div>}
+      </Card>
+
+      {canCreateInvoice && (
+        <button onClick={() => onCreateInvoice(estimate)} style={{
+          width: "100%", padding: "14px", borderRadius: "8px", border: "none",
+          background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800,
+          cursor: "pointer", marginBottom: "10px",
+        }}>
+          🧾 Create Invoice
+        </button>
+      )}
+
+      {canSendDiscount && (
+        <button onClick={handleSendDiscount} disabled={sending} style={{
+          width: "100%", padding: "13px", borderRadius: "8px", border: `1px solid ${COLORS.blueDim}`,
+          background: "transparent", color: COLORS.blue, fontSize: "14px", fontWeight: 700,
+          cursor: "pointer", opacity: sending ? 0.6 : 1,
+        }}>
+          {sending ? "Sending..." : localStatus === "discount_offered" ? "🔄 Resend Discount Offer" : "💸 Send Discount Offer"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// INVOICE DETAIL VIEW
+// ============================================================
+function InvoiceDetail({ invoice, onBack, onUpdateStatus }) {
+  const [status, setStatus] = useState(invoice.status);
+  const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : (typeof invoice.line_items === 'string' ? JSON.parse(invoice.line_items) : []);
+
+  const handleStatus = (s) => {
+    setStatus(s);
+    onUpdateStatus(invoice.id, s);
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{
+        background: "none", border: "none", color: COLORS.accent, cursor: "pointer",
+        fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px",
+      }}>
+        ← Back to Billing
+      </button>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+        <div>
+          <h2 style={{ fontSize: "22px", fontWeight: 800, color: COLORS.text, margin: 0, letterSpacing: "-0.5px" }}>{invoice.customer_name}</h2>
+          {invoice.address && <div style={{ color: COLORS.textMuted, fontSize: "13px", marginTop: "4px" }}>📍 {invoice.address}</div>}
+        </div>
+        <StatusBadge status={status} />
+      </div>
+
+      {lineItems.length > 0 && (
+        <Card style={{ marginBottom: "12px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>Line Items</div>
+          {lineItems.map((item, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: "8px", marginBottom: "8px", borderBottom: i < lineItems.length - 1 ? `1px solid ${COLORS.border}` : "none" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13px", color: COLORS.text }}>{item.description}</div>
+                {(item.quantity > 1) && <div style={{ fontSize: "11px", color: COLORS.textMuted }}>Qty: {item.quantity}</div>}
+              </div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: COLORS.accent, marginLeft: "12px" }}>
+                {formatCurrency((parseFloat(item.unit_price) || 0) * (parseFloat(item.quantity) || 1))}
+              </div>
+            </div>
+          ))}
+          <div style={{ borderTop: `1px solid ${COLORS.borderLight}`, paddingTop: "10px", marginTop: "4px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: COLORS.textMuted, marginBottom: "4px" }}>
+              <span>Subtotal</span><span>{formatCurrency(invoice.subtotal)}</span>
+            </div>
+            {parseFloat(invoice.tax_pct) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: COLORS.textMuted, marginBottom: "4px" }}>
+                <span>Tax ({invoice.tax_pct}%)</span><span>{formatCurrency(invoice.tax_amount)}</span>
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: 800, color: COLORS.accent, marginTop: "6px" }}>
+              <span>Total</span><span>{formatCurrency(invoice.total)}</span>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {invoice.qb_invoice_url && (
+        <a href={invoice.qb_invoice_url} target="_blank" rel="noopener noreferrer" style={{
+          display: "block", padding: "12px 16px", background: COLORS.surface, borderRadius: "8px",
+          border: `1px solid ${COLORS.greenDim}60`, color: COLORS.green, textDecoration: "none",
+          fontSize: "13px", fontWeight: 600, marginBottom: "12px", textAlign: "center",
+        }}>
+          ✓ View in QuickBooks →
+        </a>
+      )}
+
+      {invoice.notes && (
+        <Card style={{ marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Notes</div>
+          <div style={{ fontSize: "14px", color: COLORS.text, lineHeight: 1.5 }}>{invoice.notes}</div>
+        </Card>
+      )}
+
+      <div style={{ marginBottom: "20px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>Mark As</div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {["draft", "sent", "paid"].map(s => (
+            <button key={s} onClick={() => handleStatus(s)} style={{
+              flex: 1, padding: "10px 8px", borderRadius: "6px", border: `1px solid ${STATUS_CONFIG[s].color}40`,
+              background: status === s ? STATUS_CONFIG[s].bg : "transparent",
+              color: status === s ? STATUS_CONFIG[s].color : COLORS.textMuted,
+              cursor: "pointer", fontSize: "12px", fontWeight: 600,
+            }}>
+              {STATUS_CONFIG[s].label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -613,13 +840,196 @@ function NewJobScreen({ onBack, onSave }) {
 }
 
 // ============================================================
+// NEW ESTIMATE FORM
+// ============================================================
+function NewEstimateScreen({ onBack, onSave, initialData }) {
+  const [form, setForm] = useState({
+    customer_name: initialData?.customer_name || "",
+    phone: initialData?.phone || "",
+    email: initialData?.email || "",
+    address: initialData?.address || "",
+    description: initialData?.notes || "",
+    amount: "",
+    notes: "",
+    job_id: initialData?.id || null,
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
+  const labelStyle = { fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" };
+
+  const handleSave = async () => {
+    if (!form.customer_name || !form.amount) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/estimates`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
+      });
+      const est = await res.json();
+      onSave(est);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px" }}>← Back</button>
+      <SectionHeader title="Send Estimate" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
+        <div><label style={labelStyle}>Customer Name *</label><input style={inputStyle} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Customer name" /></div>
+        <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
+        <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
+        <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
+        <div><label style={labelStyle}>Description</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Work to be performed..." /></div>
+        <div><label style={labelStyle}>Amount * ($)</label><input style={inputStyle} type="number" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" /></div>
+        <div><label style={labelStyle}>Internal Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Notes visible to customer..." /></div>
+      </div>
+      {form.phone && (
+        <div style={{ fontSize: "12px", color: COLORS.textMuted, marginBottom: "16px", padding: "10px 12px", background: COLORS.surface, borderRadius: "6px", border: `1px solid ${COLORS.border}` }}>
+          📱 SMS approval link will be sent to {form.phone}
+        </div>
+      )}
+      <button onClick={handleSave} disabled={saving || !form.customer_name || !form.amount} style={{ width: "100%", padding: "14px", borderRadius: "8px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800, cursor: "pointer", opacity: saving || !form.customer_name || !form.amount ? 0.6 : 1 }}>
+        {saving ? "Sending..." : form.phone ? "Send Estimate via SMS" : "Create Estimate"}
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// NEW INVOICE FORM
+// ============================================================
+function NewInvoiceScreen({ onBack, onSave, jobs, initialData }) {
+  const fromEstimate = initialData?.fromEstimate;
+  const [selectedJobId, setSelectedJobId] = useState("");
+  const [form, setForm] = useState({
+    customer_name: fromEstimate?.customer_name || "",
+    phone: fromEstimate?.phone || "",
+    email: fromEstimate?.email || "",
+    address: fromEstimate?.address || "",
+    estimate_id: fromEstimate?.id || null,
+    tax_pct: "0",
+    notes: "",
+  });
+  const [lineItems, setLineItems] = useState(
+    fromEstimate
+      ? [{ description: fromEstimate.description || "Stump removal services", quantity: "1", unit_price: String(fromEstimate.amount || "") }]
+      : [{ description: "", quantity: "1", unit_price: "" }]
+  );
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
+  const labelStyle = { fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" };
+
+  const handleJobSelect = (jobId) => {
+    setSelectedJobId(jobId);
+    if (!jobId) return;
+    const job = jobs.find(j => j.id === parseInt(jobId));
+    if (job) {
+      set("customer_name", job.customer_name || "");
+      set("phone", job.phone || "");
+      set("email", job.email || "");
+      set("address", job.address || "");
+      set("job_id", job.id);
+      if (!lineItems[0].description) {
+        setLineItems([{ description: job.notes || "Stump removal services", quantity: "1", unit_price: String(job.amount || "") }]);
+      }
+    }
+  };
+
+  const addLine = () => setLineItems(prev => [...prev, { description: "", quantity: "1", unit_price: "" }]);
+  const removeLine = (i) => setLineItems(prev => prev.filter((_, idx) => idx !== i));
+  const updateLine = (i, key, val) => setLineItems(prev => prev.map((item, idx) => idx === i ? { ...item, [key]: val } : item));
+
+  const subtotal = lineItems.reduce((sum, item) => sum + (parseFloat(item.unit_price) || 0) * (parseFloat(item.quantity) || 1), 0);
+  const taxAmt = subtotal * (parseFloat(form.tax_pct) || 0) / 100;
+  const total = subtotal + taxAmt;
+
+  const handleSave = async (syncToQb) => {
+    if (!form.customer_name) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/invoices`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, line_items: lineItems, sync_to_qb: syncToQb, tax_pct: parseFloat(form.tax_pct) || 0 }),
+      });
+      const inv = await res.json();
+      onSave(inv);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px" }}>← Back</button>
+      <SectionHeader title="New Invoice" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
+
+        {!fromEstimate && (
+          <div>
+            <label style={labelStyle}>Pre-fill from Job</label>
+            <select style={inputStyle} value={selectedJobId} onChange={e => handleJobSelect(e.target.value)}>
+              <option value="">— Select a job or enter manually —</option>
+              {jobs.map(j => <option key={j.id} value={j.id}>{j.customer_name}{j.address ? ` · ${j.address}` : ""}</option>)}
+            </select>
+          </div>
+        )}
+
+        <div><label style={labelStyle}>Customer Name *</label><input style={inputStyle} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Customer name" /></div>
+        <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
+        <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
+        <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
+
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Line Items</label>
+            <button onClick={addLine} style={{ background: "none", border: `1px solid ${COLORS.border}`, color: COLORS.accent, borderRadius: "4px", padding: "4px 10px", fontSize: "12px", cursor: "pointer" }}>+ Add</button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {lineItems.map((item, i) => (
+              <div key={i} style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
+                <input style={{ ...inputStyle, flex: 3 }} value={item.description} onChange={e => updateLine(i, "description", e.target.value)} placeholder="Description" />
+                <input style={{ ...inputStyle, flex: 1, textAlign: "center" }} type="number" min="1" value={item.quantity} onChange={e => updateLine(i, "quantity", e.target.value)} placeholder="Qty" />
+                <input style={{ ...inputStyle, flex: 1.5 }} type="number" step="0.01" value={item.unit_price} onChange={e => updateLine(i, "unit_price", e.target.value)} placeholder="Price" />
+                {lineItems.length > 1 && (
+                  <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", color: COLORS.red, cursor: "pointer", fontSize: "18px", padding: "8px 4px", flexShrink: 0 }}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "10px", alignItems: "center" }}>
+          <div><label style={labelStyle}>Tax %</label><input style={inputStyle} type="number" min="0" max="100" step="0.1" value={form.tax_pct} onChange={e => set("tax_pct", e.target.value)} placeholder="0" /></div>
+          <div style={{ background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, padding: "12px 14px", marginTop: "18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: COLORS.textMuted, marginBottom: "3px" }}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+            {taxAmt > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: COLORS.textMuted, marginBottom: "3px" }}><span>Tax</span><span>{formatCurrency(taxAmt)}</span></div>}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "15px", fontWeight: 800, color: COLORS.accent }}><span>Total</span><span>{formatCurrency(total)}</span></div>
+          </div>
+        </div>
+
+        <div><label style={labelStyle}>Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Any notes for the invoice..." /></div>
+      </div>
+
+      <button onClick={() => handleSave(true)} disabled={saving || !form.customer_name} style={{ width: "100%", padding: "14px", borderRadius: "8px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800, cursor: "pointer", marginBottom: "10px", opacity: saving || !form.customer_name ? 0.6 : 1 }}>
+        {saving ? "Saving..." : "Create & Sync to QuickBooks"}
+      </button>
+      <button onClick={() => handleSave(false)} disabled={saving || !form.customer_name} style={{ width: "100%", padding: "13px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, background: "transparent", color: COLORS.textMuted, fontSize: "14px", fontWeight: 700, cursor: "pointer", opacity: saving || !form.customer_name ? 0.6 : 1 }}>
+        {saving ? "Saving..." : "Save as Draft"}
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
 // SCREENS
 // ============================================================
-function DashboardScreen({ leads, jobs, onNavigate }) {
+function DashboardScreen({ leads, jobs, estimates, invoices, onNavigate }) {
   const newLeads = leads.filter(l => l.status === "new").length;
   const todayJobs = jobs.filter(j => j.scheduled_date === new Date().toISOString().split("T")[0]);
-  const revenue = jobs.filter(j => j.status === "paid" || j.status === "invoiced").reduce((sum, j) => sum + (parseFloat(j.amount) || 0), 0);
-  const completedThisMonth = jobs.filter(j => j.status === "completed" || j.status === "invoiced" || j.status === "paid").length;
+  const revenue = invoices.filter(j => j.status === "paid").reduce((sum, j) => sum + (parseFloat(j.total) || 0), 0)
+    + jobs.filter(j => j.status === "paid" || j.status === "invoiced").reduce((sum, j) => sum + (parseFloat(j.amount) || 0), 0);
+  const pendingEstimates = estimates.filter(e => e.status === "pending").length;
 
   return (
     <div>
@@ -643,11 +1053,11 @@ function DashboardScreen({ leads, jobs, onNavigate }) {
         </Card>
         <Card>
           <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px" }}>Revenue</div>
-          <div style={{ fontSize: "28px", fontWeight: 900, color: COLORS.green, letterSpacing: "-1px" }}>{formatCurrency(revenue)}</div>
+          <div style={{ fontSize: "22px", fontWeight: 900, color: COLORS.green, letterSpacing: "-1px" }}>{formatCurrency(revenue)}</div>
         </Card>
-        <Card>
-          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px" }}>Completed</div>
-          <div style={{ fontSize: "28px", fontWeight: 900, color: COLORS.text, letterSpacing: "-1px" }}>{completedThisMonth}</div>
+        <Card onClick={pendingEstimates > 0 ? () => onNavigate("billing") : undefined}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px" }}>Pending Quotes</div>
+          <div style={{ fontSize: "28px", fontWeight: 900, color: pendingEstimates > 0 ? COLORS.accent : COLORS.textMuted, letterSpacing: "-1px" }}>{pendingEstimates}</div>
         </Card>
       </div>
 
@@ -737,11 +1147,75 @@ function JobsScreen({ jobs, onNavigate }) {
   );
 }
 
+// ============================================================
+// BILLING SCREEN (Quotes + Invoices)
+// ============================================================
+function BillingScreen({ estimates, invoices, onNavigate }) {
+  const [subTab, setSubTab] = useState("quotes");
+
+  const pillStyle = (active) => ({
+    flex: 1, padding: "8px", borderRadius: "6px", border: "none", cursor: "pointer",
+    fontSize: "13px", fontWeight: 700, transition: "all 0.15s",
+    background: active ? COLORS.accent : "transparent",
+    color: active ? COLORS.bg : COLORS.textMuted,
+  });
+
+  return (
+    <div>
+      <SectionHeader title="Billing" />
+
+      {/* Sub-tab pill selector */}
+      <div style={{ display: "flex", gap: "4px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}`, padding: "4px", marginBottom: "16px" }}>
+        <button style={pillStyle(subTab === "quotes")} onClick={() => setSubTab("quotes")}>
+          📋 Quotes {estimates.filter(e => e.status === "pending").length > 0 && <span style={{ background: COLORS.red, color: "#fff", borderRadius: "10px", padding: "1px 6px", fontSize: "10px", marginLeft: "4px" }}>{estimates.filter(e => e.status === "pending").length}</span>}
+        </button>
+        <button style={pillStyle(subTab === "invoices")} onClick={() => setSubTab("invoices")}>
+          🧾 Invoices
+        </button>
+      </div>
+
+      {subTab === "quotes" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+            <button onClick={() => onNavigate("new-estimate")} style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>+ New Quote</button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {estimates.map(e => (
+              <EstimateCard key={e.id} estimate={e} onClick={() => onNavigate("estimate-detail", e)} />
+            ))}
+            {estimates.length === 0 && <EmptyState icon="📋" title="No quotes yet" subtitle="Send an estimate to a customer to get started" />}
+          </div>
+        </div>
+      )}
+
+      {subTab === "invoices" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+            <button onClick={() => onNavigate("new-invoice")} style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>+ New Invoice</button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {invoices.map(inv => (
+              <InvoiceCard key={inv.id} invoice={inv} onClick={() => onNavigate("invoice-detail", inv)} />
+            ))}
+            {invoices.length === 0 && <EmptyState icon="🧾" title="No invoices yet" subtitle="Create an invoice or convert an approved quote" />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// SETTINGS SCREEN
+// ============================================================
 function SettingsScreen() {
-  const [autoText, setAutoText] = useState("Hey {{name}}, thanks for reaching out to Stump Pros WV! How many stumps do you need removed?");
+  const [autoText, setAutoText] = useState("Hi {name}, thank you for reaching out to Stump Pros WV! We've received your message and will be in touch with you shortly.");
   const [reviewDelay, setReviewDelay] = useState("24");
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [facebookReviewUrl, setFacebookReviewUrl] = useState("");
+  const [estimateDiscountPct, setEstimateDiscountPct] = useState("10");
+  const [estimateIntroMsg, setEstimateIntroMsg] = useState("Hi {name}, here is your estimate from Stump Pros WV:");
+  const [estimateDiscountMsg, setEstimateDiscountMsg] = useState("We'd still love to earn your business! Here's a special discounted offer just for you:");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -750,17 +1224,30 @@ function SettingsScreen() {
       if (s.review_delay) setReviewDelay(String(s.review_delay));
       if (s.google_review_url) setGoogleReviewUrl(s.google_review_url);
       if (s.facebook_review_url) setFacebookReviewUrl(s.facebook_review_url);
+      if (s.estimate_discount_pct != null) setEstimateDiscountPct(String(s.estimate_discount_pct));
+      if (s.estimate_intro_msg) setEstimateIntroMsg(s.estimate_intro_msg);
+      if (s.estimate_discount_msg) setEstimateDiscountMsg(s.estimate_discount_msg);
     }).catch(() => {});
   }, []);
 
   const handleSave = async () => {
     await fetch(`${API_BASE}/settings`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ auto_text: autoText, review_delay: parseInt(reviewDelay), google_review_url: googleReviewUrl, facebook_review_url: facebookReviewUrl }),
+      body: JSON.stringify({
+        auto_text: autoText,
+        review_delay: parseInt(reviewDelay),
+        google_review_url: googleReviewUrl,
+        facebook_review_url: facebookReviewUrl,
+        estimate_discount_pct: parseInt(estimateDiscountPct),
+        estimate_intro_msg: estimateIntroMsg,
+        estimate_discount_msg: estimateDiscountMsg,
+      }),
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+
+  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "13px", padding: "8px 10px", boxSizing: "border-box" };
 
   return (
     <div>
@@ -768,14 +1255,12 @@ function SettingsScreen() {
 
       <Card style={{ marginBottom: "12px" }}>
         <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>Auto-Response Text Message</div>
-        <textarea value={autoText} onChange={e => setAutoText(e.target.value)} rows={5} style={{
+        <textarea value={autoText} onChange={e => setAutoText(e.target.value)} rows={4} style={{
           width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px",
           color: COLORS.text, fontSize: "13px", padding: "10px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5,
           boxSizing: "border-box",
         }} />
-        <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "6px" }}>
-          Use {"{{name}}"} for the customer's name
-        </div>
+        <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "6px" }}>Use {"{name}"} for the customer's name</div>
       </Card>
 
       <Card style={{ marginBottom: "12px" }}>
@@ -793,17 +1278,30 @@ function SettingsScreen() {
         <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>Review Links</div>
         <div style={{ marginBottom: "10px" }}>
           <label style={{ fontSize: "12px", color: COLORS.textMuted, display: "block", marginBottom: "4px" }}>Google Business Profile Review URL</label>
-          <input type="url" value={googleReviewUrl} onChange={e => setGoogleReviewUrl(e.target.value)} placeholder="https://g.page/r/..." style={{
-            width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px",
-            color: COLORS.text, fontSize: "13px", padding: "8px 10px", boxSizing: "border-box",
-          }} />
+          <input type="url" value={googleReviewUrl} onChange={e => setGoogleReviewUrl(e.target.value)} placeholder="https://g.page/r/..." style={inputStyle} />
         </div>
         <div>
           <label style={{ fontSize: "12px", color: COLORS.textMuted, display: "block", marginBottom: "4px" }}>Facebook Review URL</label>
-          <input type="url" value={facebookReviewUrl} onChange={e => setFacebookReviewUrl(e.target.value)} placeholder="https://facebook.com/stumpproswv/reviews" style={{
-            width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px",
-            color: COLORS.text, fontSize: "13px", padding: "8px 10px", boxSizing: "border-box",
-          }} />
+          <input type="url" value={facebookReviewUrl} onChange={e => setFacebookReviewUrl(e.target.value)} placeholder="https://facebook.com/stumpproswv/reviews" style={inputStyle} />
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom: "12px" }}>
+        <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px" }}>Estimate Settings</div>
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ fontSize: "12px", color: COLORS.textMuted, display: "block", marginBottom: "4px" }}>Auto-Discount % (offered on decline)</label>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <input type="number" min="0" max="50" value={estimateDiscountPct} onChange={e => setEstimateDiscountPct(e.target.value)} style={{ ...inputStyle, width: "70px", textAlign: "center" }} />
+            <span style={{ fontSize: "13px", color: COLORS.textMuted }}>%</span>
+          </div>
+        </div>
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ fontSize: "12px", color: COLORS.textMuted, display: "block", marginBottom: "4px" }}>Estimate Intro Message <span style={{ color: COLORS.textDim }}>(use {"{name}"})</span></label>
+          <input type="text" value={estimateIntroMsg} onChange={e => setEstimateIntroMsg(e.target.value)} style={inputStyle} />
+        </div>
+        <div>
+          <label style={{ fontSize: "12px", color: COLORS.textMuted, display: "block", marginBottom: "4px" }}>Discount Offer Message</label>
+          <input type="text" value={estimateDiscountMsg} onChange={e => setEstimateDiscountMsg(e.target.value)} style={inputStyle} />
         </div>
       </Card>
 
@@ -834,6 +1332,8 @@ function StumpProsApp() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [leads, setLeads] = useState([]);
   const [jobs, setJobs] = useState([]);
+  const [estimates, setEstimates] = useState([]);
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
@@ -847,15 +1347,21 @@ function StumpProsApp() {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 12000);
-      const [leadsRes, jobsRes] = await Promise.all([
+      const [leadsRes, jobsRes, estimatesRes, invoicesRes] = await Promise.all([
         fetch(`${API_BASE}/leads`, { signal: controller.signal }),
         fetch(`${API_BASE}/jobs`, { signal: controller.signal }),
+        fetch(`${API_BASE}/estimates`, { signal: controller.signal }),
+        fetch(`${API_BASE}/invoices`, { signal: controller.signal }),
       ]);
       clearTimeout(timer);
-      if (!leadsRes.ok || !jobsRes.ok) throw new Error(`Server error ${leadsRes.status}`);
-      const [leadsData, jobsData] = await Promise.all([leadsRes.json(), jobsRes.json()]);
+      if (!leadsRes.ok || !jobsRes.ok) throw new Error(`Server error`);
+      const [leadsData, jobsData, estimatesData, invoicesData] = await Promise.all([
+        leadsRes.json(), jobsRes.json(), estimatesRes.json(), invoicesRes.json(),
+      ]);
       setLeads(Array.isArray(leadsData) ? leadsData : []);
       setJobs(Array.isArray(jobsData) ? jobsData : []);
+      setEstimates(Array.isArray(estimatesData) ? estimatesData : []);
+      setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
     } catch (err) {
       console.error("Load error:", err);
       setLoadError(err.name === "AbortError" ? "Server took too long to respond. Tap retry." : "Couldn't connect to server. Tap retry.");
@@ -882,6 +1388,14 @@ function StumpProsApp() {
     });
   };
 
+  const updateInvoiceStatus = async (id, newStatus) => {
+    setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: newStatus } : inv));
+    await fetch(`${API_BASE}/invoices/${id}/status`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+  };
+
   const convertLead = async (lead) => {
     const res = await fetch(`${API_BASE}/leads/${lead.id}/convert`, { method: "POST" });
     const newJob = await res.json();
@@ -890,19 +1404,77 @@ function StumpProsApp() {
   };
 
   const newLeadCount = leads.filter(l => l.status === "new").length;
-  const activeTab = screen === "dashboard" ? "dashboard" : screen.includes("lead") ? "leads" : screen.includes("job") ? "jobs" : screen;
+  const pendingEstimateCount = estimates.filter(e => e.status === "pending").length;
+
+  const activeTab = screen === "dashboard" ? "dashboard"
+    : screen.includes("lead") ? "leads"
+    : screen.includes("job") ? "jobs"
+    : (screen.includes("estimate") || screen.includes("invoice") || screen === "billing") ? "billing"
+    : screen;
 
   const renderScreen = () => {
     switch (screen) {
-      case "dashboard": return <DashboardScreen leads={leads} jobs={jobs} onNavigate={navigate} />;
-      case "leads": return <LeadsScreen leads={leads} onNavigate={navigate} />;
-      case "new-lead": return <NewLeadScreen onBack={() => navigate("leads")} onSave={(lead) => { loadData(); navigate("lead-detail", lead); }} />;
-      case "lead-detail": return selectedItem ? <LeadDetail lead={selectedItem} onBack={() => navigate("leads")} onConvert={convertLead} onUpdateStatus={updateLeadStatus} /> : null;
-      case "jobs": return <JobsScreen jobs={jobs} onNavigate={navigate} />;
-      case "new-job": return <NewJobScreen onBack={() => navigate("jobs")} onSave={(job) => { loadData(); navigate("job-detail", job); }} />;
-      case "job-detail": return selectedItem ? <JobDetail job={selectedItem} onBack={() => navigate("jobs")} onUpdateStatus={updateJobStatus} /> : null;
-      case "settings": return <SettingsScreen />;
-      default: return <DashboardScreen leads={leads} jobs={jobs} onNavigate={navigate} />;
+      case "dashboard":
+        return <DashboardScreen leads={leads} jobs={jobs} estimates={estimates} invoices={invoices} onNavigate={navigate} />;
+      case "leads":
+        return <LeadsScreen leads={leads} onNavigate={navigate} />;
+      case "new-lead":
+        return <NewLeadScreen onBack={() => navigate("leads")} onSave={(lead) => { loadData(); navigate("lead-detail", lead); }} />;
+      case "lead-detail":
+        return selectedItem ? <LeadDetail lead={selectedItem} onBack={() => navigate("leads")} onConvert={convertLead} onUpdateStatus={updateLeadStatus} /> : null;
+      case "jobs":
+        return <JobsScreen jobs={jobs} onNavigate={navigate} />;
+      case "new-job":
+        return <NewJobScreen onBack={() => navigate("jobs")} onSave={(job) => { loadData(); navigate("job-detail", job); }} />;
+      case "job-detail":
+        return selectedItem ? (
+          <JobDetail
+            job={selectedItem}
+            onBack={() => navigate("jobs")}
+            onUpdateStatus={updateJobStatus}
+            onSendEstimate={(job) => navigate("new-estimate", job)}
+          />
+        ) : null;
+      case "billing":
+        return <BillingScreen estimates={estimates} invoices={invoices} onNavigate={navigate} />;
+      case "new-estimate":
+        return (
+          <NewEstimateScreen
+            onBack={() => navigate("billing")}
+            onSave={() => { loadData(); navigate("billing"); }}
+            initialData={selectedItem}
+          />
+        );
+      case "estimate-detail":
+        return selectedItem ? (
+          <EstimateDetail
+            estimate={selectedItem}
+            onBack={() => navigate("billing")}
+            onCreateInvoice={(est) => navigate("new-invoice", { fromEstimate: est })}
+            onRefresh={loadData}
+          />
+        ) : null;
+      case "new-invoice":
+        return (
+          <NewInvoiceScreen
+            onBack={() => navigate("billing")}
+            onSave={() => { loadData(); navigate("billing"); }}
+            jobs={jobs}
+            initialData={selectedItem}
+          />
+        );
+      case "invoice-detail":
+        return selectedItem ? (
+          <InvoiceDetail
+            invoice={selectedItem}
+            onBack={() => navigate("billing")}
+            onUpdateStatus={updateInvoiceStatus}
+          />
+        ) : null;
+      case "settings":
+        return <SettingsScreen />;
+      default:
+        return <DashboardScreen leads={leads} jobs={jobs} estimates={estimates} invoices={invoices} onNavigate={navigate} />;
     }
   };
 
@@ -949,6 +1521,7 @@ function StumpProsApp() {
         <IconButton icon="🏠" label="Home" active={activeTab === "dashboard"} onClick={() => navigate("dashboard")} />
         <IconButton icon="📋" label="Leads" active={activeTab === "leads"} onClick={() => navigate("leads")} badge={newLeadCount} />
         <IconButton icon="🪵" label="Jobs" active={activeTab === "jobs"} onClick={() => navigate("jobs")} />
+        <IconButton icon="💳" label="Billing" active={activeTab === "billing"} onClick={() => navigate("billing")} badge={pendingEstimateCount} />
         <IconButton icon="⚙️" label="Settings" active={activeTab === "settings"} onClick={() => navigate("settings")} />
       </div>
     </div>

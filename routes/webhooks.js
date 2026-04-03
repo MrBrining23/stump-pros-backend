@@ -91,7 +91,7 @@ router.post('/meta', async (req, res) => {
 
       if (settings && settings.auto_text) {
         try {
-          const message = settings.auto_text.replace('{{name}}', firstName || name);
+          const message = settings.auto_text.replace('{{name}}', firstName || name).replace('{name}', firstName || name);
           await sendSMS(phone, message);
           await pool.query(
             'UPDATE leads SET auto_contacted = true, auto_contacted_at = NOW() WHERE id = $1',
