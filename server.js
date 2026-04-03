@@ -10,6 +10,7 @@ const jobsRouter = require('./routes/jobs');
 const settingsRouter = require('./routes/settings');
 const smsRouter = require('./routes/sms');
 const quickbooksRouter = require('./routes/quickbooks');
+const webhooksRouter = require('./routes/webhooks');
 const { startCronJobs } = require('./services/cron');
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/jobs', jobsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/sms', smsRouter);
 app.use('/api/quickbooks', quickbooksRouter);
+app.use('/api/webhooks', webhooksRouter);
 
 // 404 handler
 app.use((req, res) => {
