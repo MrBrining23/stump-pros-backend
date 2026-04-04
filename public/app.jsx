@@ -726,6 +726,7 @@ function InvoiceDetail({ invoice, onBack, onUpdateStatus }) {
 // ============================================================
 function NewLeadScreen({ onBack, onSave }) {
   const [form, setForm] = useState({ name: "", phone: "", email: "", address: "", source: "website", source_other: "", contact_preference: "text", notes: "" });
+  const [customerId, setCustomerId] = useState(null);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
@@ -738,7 +739,7 @@ function NewLeadScreen({ onBack, onSave }) {
       const finalSource = form.source === "other" ? (form.source_other || "other") : form.source;
       const res = await fetch(`${API_BASE}/leads`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, source: finalSource }),
+        body: JSON.stringify({ ...form, source: finalSource, customer_id: customerId }),
       });
       const lead = await res.json();
       onSave(lead);
@@ -750,7 +751,15 @@ function NewLeadScreen({ onBack, onSave }) {
       <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px" }}>← Back</button>
       <SectionHeader title="New Lead" />
       <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
-        <div><label style={labelStyle}>Name *</label><input style={inputStyle} value={form.name} onChange={e => set("name", e.target.value)} placeholder="Customer name" /></div>
+        <div>
+          <label style={labelStyle}>Customer</label>
+          <CustomerSelector
+            initialName={form.name}
+            onSelect={(c) => { if (c) { set("name", c.name); set("phone", c.phone || ""); set("email", c.email || ""); set("address", c.address || ""); setCustomerId(c.id); } else { set("name", ""); setCustomerId(null); } }}
+            placeholder="Search existing or type new name..."
+          />
+          {!form.name && <input style={{ ...inputStyle, marginTop: "8px" }} value={form.name} onChange={e => set("name", e.target.value)} placeholder="Or type name manually *" />}
+        </div>
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
         <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
@@ -789,6 +798,7 @@ function NewLeadScreen({ onBack, onSave }) {
 // ============================================================
 function NewJobScreen({ onBack, onSave }) {
   const [form, setForm] = useState({ customer_name: "", phone: "", email: "", address: "", package: "economy", stump_count: "", scheduled_date: "", scheduled_time: "", amount: "", notes: "" });
+  const [customerId, setCustomerId] = useState(null);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
@@ -800,7 +810,7 @@ function NewJobScreen({ onBack, onSave }) {
     try {
       const res = await fetch(`${API_BASE}/jobs`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, stump_count: form.stump_count ? parseInt(form.stump_count) : null, amount: form.amount ? parseFloat(form.amount) : null }),
+        body: JSON.stringify({ ...form, stump_count: form.stump_count ? parseInt(form.stump_count) : null, amount: form.amount ? parseFloat(form.amount) : null, customer_id: customerId }),
       });
       const job = await res.json();
       onSave(job);
@@ -812,7 +822,15 @@ function NewJobScreen({ onBack, onSave }) {
       <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px" }}>← Back</button>
       <SectionHeader title="New Job" />
       <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
-        <div><label style={labelStyle}>Customer Name *</label><input style={inputStyle} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Customer name" /></div>
+        <div>
+          <label style={labelStyle}>Customer *</label>
+          <CustomerSelector
+            initialName={form.customer_name}
+            onSelect={(c) => { if (c) { set("customer_name", c.name); set("phone", c.phone || ""); set("email", c.email || ""); set("address", c.address || ""); setCustomerId(c.id); } else { set("customer_name", ""); setCustomerId(null); } }}
+            placeholder="Search existing or type new name..."
+          />
+          {!form.customer_name && <input style={{ ...inputStyle, marginTop: "8px" }} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Or type name manually *" />}
+        </div>
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
         <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
@@ -853,6 +871,8 @@ function NewEstimateScreen({ onBack, onSave, initialData }) {
     notes: "",
     job_id: initialData?.id || null,
   });
+  const [photos, setPhotos] = useState([]);
+  const [customerId, setCustomerId] = useState(initialData?.customer_id || null);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
@@ -864,7 +884,7 @@ function NewEstimateScreen({ onBack, onSave, initialData }) {
     try {
       const res = await fetch(`${API_BASE}/estimates`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
+        body: JSON.stringify({ ...form, amount: parseFloat(form.amount), photos, customer_id: customerId }),
       });
       const est = await res.json();
       onSave(est);
@@ -876,13 +896,25 @@ function NewEstimateScreen({ onBack, onSave, initialData }) {
       <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px" }}>← Back</button>
       <SectionHeader title="Send Estimate" />
       <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
-        <div><label style={labelStyle}>Customer Name *</label><input style={inputStyle} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Customer name" /></div>
+        <div>
+          <label style={labelStyle}>Customer *</label>
+          <CustomerSelector
+            initialName={form.customer_name}
+            onSelect={(c) => { if (c) { set("customer_name", c.name); set("phone", c.phone || ""); set("email", c.email || ""); set("address", c.address || ""); setCustomerId(c.id); } else { set("customer_name", ""); setCustomerId(null); } }}
+            placeholder="Search existing or type new name..."
+          />
+          {!form.customer_name && <input style={{ ...inputStyle, marginTop: "8px" }} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Or type name manually *" />}
+        </div>
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
         <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
         <div><label style={labelStyle}>Description</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Work to be performed..." /></div>
         <div><label style={labelStyle}>Amount * ($)</label><input style={inputStyle} type="number" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" /></div>
         <div><label style={labelStyle}>Internal Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Notes visible to customer..." /></div>
+        <div>
+          <label style={labelStyle}>Photos</label>
+          <PhotoUpload photos={photos} onChange={setPhotos} />
+        </div>
       </div>
       {form.phone && (
         <div style={{ fontSize: "12px", color: COLORS.textMuted, marginBottom: "16px", padding: "10px 12px", background: COLORS.surface, borderRadius: "6px", border: `1px solid ${COLORS.border}` }}>
@@ -1327,6 +1359,344 @@ function SettingsScreen() {
 // ============================================================
 // MAIN APP
 // ============================================================
+// ============================================================
+// CUSTOMER SELECTOR — search-as-you-type autocomplete
+// ============================================================
+function CustomerSelector({ onSelect, initialName = "", placeholder = "Search existing customers..." }) {
+  const [query, setQuery] = useState(initialName);
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const timeoutRef = React.useRef(null);
+
+  const doSearch = async (q) => {
+    if (!q.trim()) { setResults([]); setOpen(false); return; }
+    setSearching(true);
+    try {
+      const res = await fetch(`${API_BASE}/customers?search=${encodeURIComponent(q)}&limit=8`);
+      const data = await res.json();
+      setResults(Array.isArray(data) ? data : []);
+      setOpen(true);
+    } catch (e) { /* silent */ } finally { setSearching(false); }
+  };
+
+  const handleChange = (v) => {
+    setQuery(v);
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => doSearch(v), 250);
+  };
+
+  const handleSelect = (c) => {
+    setQuery(c.name);
+    setOpen(false);
+    setResults([]);
+    onSelect(c);
+  };
+
+  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <input
+          style={{ ...inputStyle, paddingRight: "32px" }}
+          value={query}
+          onChange={e => handleChange(e.target.value)}
+          onFocus={() => query && doSearch(query)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder={placeholder}
+        />
+        {searching && <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", fontSize: "12px", color: COLORS.textMuted }}>⌛</span>}
+        {!searching && query && <span onClick={() => { setQuery(""); setResults([]); onSelect(null); }} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", color: COLORS.textMuted, cursor: "pointer" }}>✕</span>}
+      </div>
+      {open && results.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", overflow: "hidden", marginTop: "4px" }}>
+          {results.map(c => (
+            <div key={c.id} onMouseDown={() => handleSelect(c)} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}` }}
+              onMouseEnter={e => e.currentTarget.style.background = COLORS.bg}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: COLORS.text }}>{c.name}</div>
+              <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{[c.phone, c.address].filter(Boolean).join(" · ")}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// PHOTO UPLOAD — reusable photo picker for estimates
+// ============================================================
+function PhotoUpload({ photos, onChange }) {
+  const fileRef = React.useRef(null);
+
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    let pending = files.length;
+    const newPhotos = [];
+    files.forEach(file => {
+      // Compress slightly by resizing in a canvas
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1200;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          newPhotos.push({ data: canvas.toDataURL("image/jpeg", 0.75), name: file.name });
+          pending--;
+          if (pending === 0) onChange([...photos, ...newPhotos]);
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
+  };
+
+  const remove = (i) => onChange(photos.filter((_, idx) => idx !== i));
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: photos.length ? "10px" : 0 }}>
+        {photos.map((p, i) => (
+          <div key={i} style={{ position: "relative", width: "80px", height: "80px", borderRadius: "8px", overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
+            <img src={p.data} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <button onClick={() => remove(i)} style={{ position: "absolute", top: "2px", right: "2px", background: "rgba(0,0,0,0.7)", border: "none", borderRadius: "50%", width: "20px", height: "20px", color: "#fff", cursor: "pointer", fontSize: "12px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>✕</button>
+          </div>
+        ))}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
+      <button type="button" onClick={() => fileRef.current?.click()} style={{ padding: "8px 16px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+        📷 {photos.length > 0 ? `Add More (${photos.length})` : "Add Photos"}
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// CUSTOMERS SCREEN
+// ============================================================
+function CustomersScreen({ onNavigate }) {
+  const [customers, setCustomers] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(null);
+  const [importResult, setImportResult] = useState(null);
+  const fileRef = React.useRef(null);
+  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
+
+  const load = async (q = "") => {
+    setLoading(true);
+    try {
+      const url = q ? `${API_BASE}/customers?search=${encodeURIComponent(q)}&limit=200` : `${API_BASE}/customers?limit=200`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch (e) { setCustomers([]); } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleSearch = (v) => {
+    setSearch(v);
+    clearTimeout(window._custSearchTimeout);
+    window._custSearchTimeout = setTimeout(() => load(v), 300);
+  };
+
+  const importQB = async () => {
+    setImporting("qb"); setImportResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/customers/import/quickbooks`, { method: "POST" });
+      const data = await res.json();
+      if (data.error) { setImportResult({ error: data.error }); }
+      else { setImportResult({ msg: `✅ Imported ${data.imported} new, updated ${data.updated}` }); load(search); }
+    } catch (e) { setImportResult({ error: e.message }); } finally { setImporting(null); }
+  };
+
+  const parseCSV = (text) => {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+    return lines.slice(1).map(line => {
+      const vals = [];
+      let cur = "", inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === "," && !inQ) { vals.push(cur.trim()); cur = ""; }
+        else { cur += ch; }
+      }
+      vals.push(cur.trim());
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = (vals[i] || "").replace(/^"|"$/g, ""); });
+      return obj;
+    });
+  };
+
+  const handleCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImporting("csv"); setImportResult(null);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const rows = parseCSV(ev.target.result);
+      try {
+        const res = await fetch(`${API_BASE}/customers/import/csv`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows }),
+        });
+        const data = await res.json();
+        if (data.error) { setImportResult({ error: data.error }); }
+        else { setImportResult({ msg: `✅ Imported ${data.imported} new, skipped ${data.skipped} duplicates` }); load(search); }
+      } catch (err) { setImportResult({ error: err.message }); } finally { setImporting(null); }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const sourceLabel = (s) => s === "quickbooks" ? "QB" : s === "housecall_pro" ? "HCP" : "";
+  const sourceBg = (s) => s === "quickbooks" ? "#1a3a1a" : s === "housecall_pro" ? "#1a2a3a" : null;
+  const sourceColor = (s) => s === "quickbooks" ? "#4ade80" : s === "housecall_pro" ? "#60a5fa" : null;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+        <SectionHeader title={`Customers (${customers.length})`} />
+        <button onClick={() => onNavigate("add-customer")} style={{ background: COLORS.accent, border: "none", borderRadius: "8px", color: COLORS.bg, fontSize: "13px", fontWeight: 700, padding: "8px 14px", cursor: "pointer" }}>+ Add</button>
+      </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: "14px" }}>
+        <input style={inputStyle} value={search} onChange={e => handleSearch(e.target.value)} placeholder="🔍  Search by name, phone, or email..." />
+      </div>
+
+      {/* Import buttons */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+        <button onClick={importQB} disabled={!!importing} style={{ flex: 1, padding: "9px 10px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "8px", color: COLORS.text, fontSize: "12px", fontWeight: 600, cursor: "pointer", opacity: importing ? 0.6 : 1 }}>
+          {importing === "qb" ? "Importing..." : "⬇ Import from QuickBooks"}
+        </button>
+        <button onClick={() => fileRef.current?.click()} disabled={!!importing} style={{ flex: 1, padding: "9px 10px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "8px", color: COLORS.text, fontSize: "12px", fontWeight: 600, cursor: "pointer", opacity: importing ? 0.6 : 1 }}>
+          {importing === "csv" ? "Importing..." : "⬇ Import HCP CSV"}
+        </button>
+        <input ref={fileRef} type="file" accept=".csv" onChange={handleCSV} style={{ display: "none" }} />
+      </div>
+
+      {importResult && (
+        <div style={{ marginBottom: "12px", padding: "10px 14px", borderRadius: "8px", background: importResult.error ? "#2a1a1a" : "#1a2a1a", border: `1px solid ${importResult.error ? COLORS.red : "#4ade80"}40`, fontSize: "13px", color: importResult.error ? COLORS.red : "#4ade80" }}>
+          {importResult.error || importResult.msg}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: "center", color: COLORS.textMuted, fontSize: "14px", padding: "40px 0" }}>Loading...</div>
+      ) : customers.length === 0 ? (
+        <div style={{ textAlign: "center", color: COLORS.textMuted, fontSize: "14px", padding: "40px 0" }}>
+          {search ? "No customers match your search." : "No customers yet. Import from QuickBooks or Housecall Pro, or add manually."}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {customers.map(c => (
+            <div key={c.id} onClick={() => onNavigate("customer-detail", c)} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "10px", padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "14px", fontWeight: 700, color: COLORS.text, display: "flex", alignItems: "center", gap: "8px" }}>
+                  {c.name}
+                  {c.source !== "manual" && <span style={{ fontSize: "10px", fontWeight: 700, background: sourceBg(c.source), color: sourceColor(c.source), padding: "2px 6px", borderRadius: "4px" }}>{sourceLabel(c.source)}</span>}
+                </div>
+                {c.phone && <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "2px" }}>📞 {c.phone}</div>}
+                {c.address && <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📍 {c.address}</div>}
+              </div>
+              <div style={{ color: COLORS.textDim, fontSize: "16px", marginLeft: "8px" }}>›</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// CUSTOMER DETAIL
+// ============================================================
+function CustomerDetail({ customer, onBack, onEdit, onDelete }) {
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = async () => {
+    if (!confirm(`Delete ${customer.name}?`)) return;
+    setDeleting(true);
+    await fetch(`${API_BASE}/customers/${customer.id}`, { method: "DELETE" });
+    onDelete();
+  };
+  const Row = ({ icon, val }) => val ? <div style={{ fontSize: "13px", color: COLORS.text, display: "flex", gap: "8px", alignItems: "flex-start" }}><span>{icon}</span><span>{val}</span></div> : null;
+  return (
+    <div>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px" }}>← Customers</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+        <h2 style={{ fontSize: "22px", fontWeight: 800, color: COLORS.text, margin: 0 }}>{customer.name}</h2>
+        <button onClick={onEdit} style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.textMuted, fontSize: "12px", padding: "6px 12px", cursor: "pointer" }}>Edit</button>
+      </div>
+      <Card style={{ gap: "10px", display: "flex", flexDirection: "column", marginBottom: "12px" }}>
+        <Row icon="📞" val={customer.phone} />
+        <Row icon="✉️" val={customer.email} />
+        <Row icon="📍" val={customer.address} />
+        {customer.notes && <Row icon="📝" val={customer.notes} />}
+      </Card>
+      <button onClick={handleDelete} disabled={deleting} style={{ width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${COLORS.red}40`, background: "transparent", color: COLORS.red, fontSize: "13px", fontWeight: 600, cursor: "pointer", opacity: deleting ? 0.6 : 1 }}>
+        {deleting ? "Deleting..." : "Delete Customer"}
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// ADD / EDIT CUSTOMER FORM
+// ============================================================
+function AddCustomerScreen({ onBack, onSave, existing = null }) {
+  const [form, setForm] = useState({ name: existing?.name || "", phone: existing?.phone || "", email: existing?.email || "", address: existing?.address || "", notes: existing?.notes || "" });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
+  const labelStyle = { fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" };
+
+  const handleSave = async () => {
+    if (!form.name) return;
+    setSaving(true);
+    try {
+      const url = existing ? `${API_BASE}/customers/${existing.id}` : `${API_BASE}/customers`;
+      const method = existing ? "PATCH" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const customer = await res.json();
+      onSave(customer);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px" }}>← Back</button>
+      <SectionHeader title={existing ? "Edit Customer" : "Add Customer"} />
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
+        <div><label style={labelStyle}>Name *</label><input style={inputStyle} value={form.name} onChange={e => set("name", e.target.value)} placeholder="Full name" /></div>
+        <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
+        <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
+        <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St" /></div>
+        <div><label style={labelStyle}>Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Any notes..." /></div>
+      </div>
+      <button onClick={handleSave} disabled={saving || !form.name} style={{ width: "100%", padding: "14px", borderRadius: "8px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800, cursor: "pointer", opacity: saving || !form.name ? 0.6 : 1 }}>
+        {saving ? "Saving..." : existing ? "Save Changes" : "Add Customer"}
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// APP COMPONENT
+// ============================================================
 function StumpProsApp() {
   const [screen, setScreen] = useState("dashboard");
   const [selectedItem, setSelectedItem] = useState(null);
@@ -1410,6 +1780,7 @@ function StumpProsApp() {
     : screen.includes("lead") ? "leads"
     : screen.includes("job") ? "jobs"
     : (screen.includes("estimate") || screen.includes("invoice") || screen === "billing") ? "billing"
+    : screen.includes("customer") ? "customers"
     : screen;
 
   const renderScreen = () => {
@@ -1471,6 +1842,25 @@ function StumpProsApp() {
             onUpdateStatus={updateInvoiceStatus}
           />
         ) : null;
+      case "customers":
+        return <CustomersScreen onNavigate={navigate} />;
+      case "customer-detail":
+        return selectedItem ? (
+          <CustomerDetail
+            customer={selectedItem}
+            onBack={() => navigate("customers")}
+            onEdit={() => navigate("add-customer", selectedItem)}
+            onDelete={() => { navigate("customers"); }}
+          />
+        ) : null;
+      case "add-customer":
+        return (
+          <AddCustomerScreen
+            onBack={() => navigate(selectedItem ? "customer-detail" : "customers")}
+            onSave={() => { navigate("customers"); }}
+            existing={selectedItem}
+          />
+        );
       case "settings":
         return <SettingsScreen />;
       default:
@@ -1522,6 +1912,7 @@ function StumpProsApp() {
         <IconButton icon="📋" label="Leads" active={activeTab === "leads"} onClick={() => navigate("leads")} badge={newLeadCount} />
         <IconButton icon="🪵" label="Jobs" active={activeTab === "jobs"} onClick={() => navigate("jobs")} />
         <IconButton icon="💳" label="Billing" active={activeTab === "billing"} onClick={() => navigate("billing")} badge={pendingEstimateCount} />
+        <IconButton icon="👥" label="Customers" active={activeTab === "customers"} onClick={() => navigate("customers")} />
         <IconButton icon="⚙️" label="Settings" active={activeTab === "settings"} onClick={() => navigate("settings")} />
       </div>
     </div>

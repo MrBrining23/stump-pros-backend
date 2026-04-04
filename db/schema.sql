@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
-  auto_text TEXT DEFAULT 'Hi {{name}}, thank you for reaching out to Stump Pros WV! We''ve received your message and will be in touch with you shortly.',
+  auto_text TEXT DEFAULT 'Hi {{name}}, thanks for reaching out to Stump Pros WV! We''ll get back to you shortly. In the meantime, feel free to text us photos of your stumps for a quick quote!',
   review_delay INTEGER DEFAULT 24,
   google_review_url TEXT,
   facebook_review_url TEXT,
@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 INSERT INTO settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+UPDATE settings SET auto_text = 'Hi {{name}}, thanks for reaching out to Stump Pros WV! We''ll get back to you shortly. In the meantime, feel free to text us photos of your stumps for a quick quote!' WHERE id = 1 AND auto_text = 'Hi {{name}}, thank you for reaching out to Stump Pros WV! We''ve received your message and will be in touch with you shortly.';
 
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS estimate_discount_pct INTEGER DEFAULT 10;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS estimate_intro_msg TEXT DEFAULT 'Hi {name}, here is your estimate from Stump Pros WV:';
@@ -70,6 +71,28 @@ CREATE TABLE IF NOT EXISTS estimates (
   responded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Customer database
+CREATE TABLE IF NOT EXISTS customers (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT,
+  email TEXT,
+  address TEXT,
+  notes TEXT,
+  source TEXT DEFAULT 'manual',
+  external_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS customers_name_idx ON customers (lower(name));
+CREATE INDEX IF NOT EXISTS customers_phone_idx ON customers (phone);
+
+-- Photos on estimates
+ALTER TABLE estimates ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]';
+-- Customer link on estimates/jobs/leads
+ALTER TABLE estimates ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS invoices (
   id SERIAL PRIMARY KEY,

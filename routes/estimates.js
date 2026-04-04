@@ -6,16 +6,17 @@ const { sendSMS } = require('../services/sms');
 
 // POST /api/estimates — create & send estimate
 estimatesRouter.post('/', async (req, res) => {
-  const { job_id, customer_name, phone, email, address, description, amount, notes } = req.body;
+  const { job_id, customer_id, customer_name, phone, email, address, description, amount, notes, photos } = req.body;
   if (!customer_name) return res.status(400).json({ error: 'customer_name is required' });
 
   try {
     const result = await pool.query(
-      `INSERT INTO estimates (job_id, customer_name, phone, email, address, description, amount, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO estimates (job_id, customer_id, customer_name, phone, email, address, description, amount, notes, photos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [job_id || null, customer_name, phone || null, email || null,
-       address || null, description || null, amount || null, notes || null]
+      [job_id || null, customer_id || null, customer_name, phone || null, email || null,
+       address || null, description || null, amount || null, notes || null,
+       JSON.stringify(photos || [])]
     );
     const estimate = result.rows[0];
 
@@ -123,7 +124,7 @@ estimatesRouter.delete('/:id', async (req, res) => {
 responseRouter.get('/:token', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT customer_name, address, description, amount, discounted_amount, discount_pct, status, notes
+      `SELECT customer_name, address, description, amount, discounted_amount, discount_pct, status, notes, photos
        FROM estimates
        WHERE approval_token = $1 OR discount_token = $1`,
       [req.params.token]
