@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const pool = require('../db/pool');
 const { sendSMS } = require('./sms');
+const { processPendingFollowUps } = require('./followUpEngine');
 
 function startCronJobs() {
   // Every hour: check for completed jobs that need a review request SMS
@@ -44,6 +45,12 @@ function startCronJobs() {
     } catch (err) {
       console.error('[CRON] Error in review request cron:', err.message);
     }
+  });
+
+  // Every 5 minutes: process pending follow-up drips
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('[CRON] Checking for pending follow-ups...');
+    await processPendingFollowUps();
   });
 
   console.log('[CRON] Jobs scheduled.');
