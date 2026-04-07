@@ -1897,15 +1897,15 @@ function StumpProsApp() {
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-      <div style={{ flex: 1, padding: "calc(20px + env(safe-area-inset-top, 0px)) 16px 100px 16px", overflowY: "auto" }}>
+      <div className="app-content" style={{ flex: 1, overflowY: "auto" }}>
         {renderScreen()}
       </div>
 
-      <div style={{
+      <div className="app-tab-bar" style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: "100%", maxWidth: "480px",
         background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`,
-        display: "flex", justifyContent: "space-around", padding: "6px 0 env(safe-area-inset-bottom, 8px) 0",
+        display: "flex", justifyContent: "space-around",
         zIndex: 100,
       }}>
         <IconButton icon="🏠" label="Home" active={activeTab === "dashboard"} onClick={() => navigate("dashboard")} />
