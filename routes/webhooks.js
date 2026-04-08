@@ -34,12 +34,34 @@ router.get('/meta', (req, res) => {
   return res.sendStatus(403);
 });
 
+// GET /api/webhooks/meta/status — check Meta webhook configuration
+router.get('/meta/status', (req, res) => {
+  const hasVerifyToken = !!process.env.META_WEBHOOK_VERIFY_TOKEN;
+  const hasPageToken = !!process.env.META_PAGE_ACCESS_TOKEN;
+  const configured = hasVerifyToken && hasPageToken;
+
+  res.json({
+    configured,
+    verify_token: hasVerifyToken ? 'set' : 'MISSING',
+    page_access_token: hasPageToken ? 'set' : 'MISSING',
+    webhook_url: '/api/webhooks/meta',
+    message: configured
+      ? 'Meta Lead Ads webhook is configured and ready.'
+      : 'Missing environment variables — set them in Railway dashboard.',
+  });
+});
+
 // POST /api/webhooks/meta — receive lead events from Meta Lead Ads
 router.post('/meta', async (req, res) => {
   // Respond 200 immediately — Meta requires a fast response
   res.sendStatus(200);
 
   try {
+    if (!process.env.META_PAGE_ACCESS_TOKEN) {
+      console.error('META ERROR: META_PAGE_ACCESS_TOKEN is not set — cannot fetch lead data. Set it in Railway env vars.');
+      return;
+    }
+
     const entry = req.body && req.body.entry && req.body.entry[0];
     const change = entry && entry.changes && entry.changes[0];
     const value = change && change.value;

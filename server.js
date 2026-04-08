@@ -55,6 +55,17 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
+function checkMetaConfig() {
+  const missing = [];
+  if (!process.env.META_WEBHOOK_VERIFY_TOKEN) missing.push('META_WEBHOOK_VERIFY_TOKEN');
+  if (!process.env.META_PAGE_ACCESS_TOKEN) missing.push('META_PAGE_ACCESS_TOKEN');
+  if (missing.length > 0) {
+    console.warn(`⚠ Meta Lead Ads: missing env vars: ${missing.join(', ')} — webhook will NOT capture leads until configured.`);
+  } else {
+    console.log('Meta Lead Ads: configured.');
+  }
+}
+
 async function start() {
   try {
     const schema = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8');
@@ -65,6 +76,7 @@ async function start() {
   }
   app.listen(PORT, () => {
     console.log(`Stump Pros backend running on port ${PORT}`);
+    checkMetaConfig();
     startCronJobs();
   });
 }
