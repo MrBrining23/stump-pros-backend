@@ -65,6 +65,12 @@ const PACKAGES = {
   executive: { label: "Executive", desc: "Full root removal" },
 };
 
+const SERVICES = [
+  { name: "Stump Grinding", description: "Our stump grinding service includes grinding the stump down to a depth of at least 6 inches below ground level (when possible), ensuring it's well below the surface to ensure grass can be grown with no issues. We also grind the main root ball as part of the standard service.\n\nPlease note: excess surface roots (those that extend significantly away from the stump) are not included in the base price and can be addressed for an additional fee upon request.\n\nAll grinding debris is left on-site in a neat pile over the stump area. We do offer packages that include debris clean up, and spreading top soil, grass seed and straw over affected area.\n\nOnce the debris is removed, the area will be smooth and clean—you won't even be able to tell a stump was ever there." },
+  { name: "Debris Clean Up", description: "Our debris cleanup service includes removing all stump grindings and leveling the area, leaving it smooth and ready for the next step in your landscaping. This process ensures a flat, clean surface where the stump once was.\n\nPlease note: While the area will be level, you'll still need to add topsoil before planting grass or other vegetation, as grindings alone don't support healthy growth." },
+  { name: "Top Soil, Grass Seed and Straw", description: "After cleanup, we offer topsoil installation followed by premium grass seed/fertilizer mixture and straw covering to help restore your yard. We add a fresh layer of topsoil to promote healthy root growth, then apply quality seed that has fertilizer mixed in, and top it off with straw to protect against erosion and retain moisture.\n\nThis service gives your lawn the best chance to grow back lush and green, making it look like the stump was never there. Seed will need watered at least once a day, possibly more depending on heat and recent rainfall." },
+];
+
 const SOURCE_ICONS = { website: "🌐", facebook: "📘", instagram: "📸" };
 const PREF_ICONS = { call: "📞", text: "💬", email: "📧" };
 
@@ -908,7 +914,14 @@ function NewEstimateScreen({ onBack, onSave, initialData }) {
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
         <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
-        <div><label style={labelStyle}>Description</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Work to be performed..." /></div>
+        <div>
+          <label style={labelStyle}>Service</label>
+          <select style={inputStyle} onChange={e => { const svc = SERVICES.find(s => s.name === e.target.value); if (svc) set("description", (form.description ? form.description + "\n\n" : "") + svc.name + "\n" + svc.description); }}>
+            <option value="">— Add a service —</option>
+            {SERVICES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+          </select>
+        </div>
+        <div><label style={labelStyle}>Description</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={5} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Work to be performed..." /></div>
         <div><label style={labelStyle}>Amount * ($)</label><input style={inputStyle} type="number" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" /></div>
         <div><label style={labelStyle}>Internal Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Notes visible to customer..." /></div>
         <div>
@@ -1007,7 +1020,15 @@ function NewInvoiceScreen({ onBack, onSave, jobs, initialData }) {
           </div>
         )}
 
-        <div><label style={labelStyle}>Customer Name *</label><input style={inputStyle} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Customer name" /></div>
+        <div>
+          <label style={labelStyle}>Customer *</label>
+          <CustomerSelector
+            initialName={form.customer_name}
+            onSelect={(c) => { if (c) { set("customer_name", c.name); set("phone", c.phone || ""); set("email", c.email || ""); set("address", c.address || ""); } else { set("customer_name", ""); } }}
+            placeholder="Search existing or type new name..."
+          />
+          {!form.customer_name && <input style={{ ...inputStyle, marginTop: "8px" }} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Or type name manually *" />}
+        </div>
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
         <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
@@ -1015,7 +1036,14 @@ function NewInvoiceScreen({ onBack, onSave, jobs, initialData }) {
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Line Items</label>
-            <button onClick={addLine} style={{ background: "none", border: `1px solid ${COLORS.border}`, color: COLORS.accent, borderRadius: "4px", padding: "4px 10px", fontSize: "12px", cursor: "pointer" }}>+ Add</button>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <select style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.accent, borderRadius: "4px", padding: "4px 8px", fontSize: "12px", cursor: "pointer", fontFamily: "inherit" }}
+                value="" onChange={e => { const svc = SERVICES.find(s => s.name === e.target.value); if (svc) setLineItems(prev => [...prev, { description: svc.name, quantity: "1", unit_price: "" }]); }}>
+                <option value="">+ Service</option>
+                {SERVICES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+              </select>
+              <button onClick={addLine} style={{ background: "none", border: `1px solid ${COLORS.border}`, color: COLORS.accent, borderRadius: "4px", padding: "4px 10px", fontSize: "12px", cursor: "pointer" }}>+ Custom</button>
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {lineItems.map((item, i) => (
