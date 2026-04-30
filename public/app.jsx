@@ -2013,62 +2013,7 @@ function CustomerSelector({ onSelect, initialName = "", placeholder = "Search ex
   );
 }
 
-// ============================================================
-// PHOTO UPLOAD — reusable photo picker for estimates
-// ============================================================
-function PhotoUpload({ photos, onChange }) {
-  const fileRef = React.useRef(null);
-
-  const handleFiles = (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    let pending = files.length;
-    const newPhotos = [];
-    files.forEach(file => {
-      // Compress slightly by resizing in a canvas
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const img = new Image();
-        img.onload = () => {
-          const MAX = 1200;
-          let w = img.width, h = img.height;
-          if (w > MAX || h > MAX) {
-            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-            else { w = Math.round(w * MAX / h); h = MAX; }
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = w; canvas.height = h;
-          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-          newPhotos.push({ data: canvas.toDataURL("image/jpeg", 0.75), name: file.name });
-          pending--;
-          if (pending === 0) onChange([...photos, ...newPhotos]);
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
-  };
-
-  const remove = (i) => onChange(photos.filter((_, idx) => idx !== i));
-
-  return (
-    <div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: photos.length ? "10px" : 0 }}>
-        {photos.map((p, i) => (
-          <div key={i} style={{ position: "relative", width: "80px", height: "80px", borderRadius: "8px", overflow: "hidden", border: `1px solid ${COLORS.border}` }}>
-            <img src={p.data} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            <button onClick={() => remove(i)} style={{ position: "absolute", top: "2px", right: "2px", background: "rgba(0,0,0,0.7)", border: "none", borderRadius: "50%", width: "20px", height: "20px", color: "#fff", cursor: "pointer", fontSize: "12px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>✕</button>
-          </div>
-        ))}
-      </div>
-      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: "none" }} />
-      <button type="button" onClick={() => fileRef.current?.click()} style={{ padding: "8px 16px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "13px", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-        📷 {photos.length > 0 ? `Add More (${photos.length})` : "Add Photos"}
-      </button>
-    </div>
-  );
-}
+// (PhotoUpload is defined in the EstimateBuilder section above)
 
 // ============================================================
 // CUSTOMERS SCREEN
