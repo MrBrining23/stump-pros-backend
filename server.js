@@ -57,7 +57,7 @@ const PORT = process.env.PORT || 3000;
 
 async function start() {
   try {
-    const schema = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8');
+    const schema = fs.readFileSync(path.join(__dirname, 'db', 'migration-complete.sql'), 'utf8');
     await pool.query(schema);
     console.log('Database schema ready.');
   } catch (err) {
