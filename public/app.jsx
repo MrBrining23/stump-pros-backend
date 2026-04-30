@@ -1,10 +1,10 @@
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 
 // ============================================================
 // STUMP PROS WV - FIELD SERVICE APP
 // ============================================================
 
-const API_BASE = "https://stump-pros-backend-production.up.railway.app/api";
+const API_BASE = "/api";
 
 // ============================================================
 // THEME & CONSTANTS
@@ -857,76 +857,664 @@ function NewJobScreen({ onBack, onSave }) {
   );
 }
 
-// ============================================================
-// NEW ESTIMATE FORM
-// ============================================================
-function NewEstimateScreen({ onBack, onSave, initialData }) {
-  const [form, setForm] = useState({
-    customer_name: initialData?.customer_name || "",
-    phone: initialData?.phone || "",
-    email: initialData?.email || "",
-    address: initialData?.address || "",
-    description: initialData?.notes || "",
-    amount: "",
-    notes: "",
-    job_id: initialData?.id || null,
-  });
-  const [photos, setPhotos] = useState([]);
-  const [customerId, setCustomerId] = useState(initialData?.customer_id || null);
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
-  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
-  const labelStyle = { fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" };
 
-  const handleSave = async () => {
-    if (!form.customer_name || !form.amount) return;
-    setSaving(true);
+// ============================================================
+// ESTIMATE BUILDER (replaces NewEstimateScreen)
+// ============================================================
+/**
+ * EstimateBuilder.jsx — Stump Pros WV
+ * Full flow: Build → Save → Upload Photos → Send or Accept On-Site
+ */
+
+
+// ── Pricing constants ──────────────────────────────────────────────────────
+const PRICE_PER_INCH = 5.00;
+const MIN_PER_STUMP  = 50.00;
+const MIN_PER_JOB    = 225.00;
+
+const DIFFICULTY_OPTS = [
+  { value: "normal",     label: "Normal",     mult: 1.00 },
+  { value: "hard",       label: "Hard",       mult: 1.25 },
+  { value: "very_dense", label: "Very Dense", mult: 1.50 },
+];
+const ACCESS_OPTS = [
+  { value: "open",         label: "Open",         mult: 1.00 },
+  { value: "limited",      label: "Limited",      mult: 1.25 },
+  { value: "very_limited", label: "Very Limited", mult: 1.50 },
+];
+const DEPTH_OPTS = [
+  { value: "standard",   label: "Standard",  mult: 1.00 },
+  { value: "extra_deep", label: "Extra Deep",mult: 1.25 },
+];
+const CLEANUP_OPTS = [
+  { value: "none",         label: "None",              mult: 1.00 },
+  { value: "chips_only",   label: "Chips",             mult: 1.50 },
+  { value: "full_cleanup", label: "Full Restoration",  mult: 2.00 },
+];
+
+const CAPTION_SUGGESTIONS = ["Before", "After", "Stump 1", "Stump 2", "Access", "Roots"];
+
+function calcStump(s) {
+  const d = parseFloat(s.diameter);
+  if (!d || d <= 0) return 0;
+  const base  = d * PRICE_PER_INCH;
+  const diff  = DIFFICULTY_OPTS.find(o => o.value === s.difficulty)?.mult ?? 1;
+  const acc   = ACCESS_OPTS.find(o => o.value === s.access)?.mult         ?? 1;
+  const dep   = DEPTH_OPTS.find(o => o.value === s.depth)?.mult           ?? 1;
+  const clean = CLEANUP_OPTS.find(o => o.value === s.cleanup)?.mult       ?? 1;
+  return Math.max(base * diff * acc * dep * clean, MIN_PER_STUMP);
+}
+function calcJob(stumps) {
+  return Math.max(stumps.reduce((a, s) => a + calcStump(s), 0), MIN_PER_JOB);
+}
+function fmt(n) {
+  return `$${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+}
+function newStump(i) {
+  return { id: Date.now() + i, diameter: "", difficulty: "normal",
+           access: "open", depth: "standard", cleanup: "none", notes: "" };
+}
+
+// ── Segment selector ─────────────────────────────────────────────────────
+function Segs({ label, value, onChange, options }) {
+  return (
+    <div style={s.segWrap}>
+      <span style={s.segLbl}>{label}</span>
+      <div style={s.segs}>
+        {options.map(o => (
+          <button key={o.value} type="button" onClick={() => onChange(o.value)}
+            style={{ ...s.seg, ...(value === o.value ? s.segOn : {}) }}>
+            {o.label}{o.mult !== 1 && <span style={s.badge}> ×{o.mult}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Stump card ───────────────────────────────────────────────────────────
+function StumpCard({ stump, index, onChange, onRemove, canRemove }) {
+  const sub    = calcStump(stump);
+  const hasMin = stump.diameter && parseFloat(stump.diameter) > 0 && sub === MIN_PER_STUMP;
+  return (
+    <div style={s.card}>
+      <div style={s.cardHead}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={s.numBadge}>#{index + 1}</span>
+          <span style={{ fontWeight:700, fontSize:14 }}>Stump</span>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={s.subAmt}>{fmt(sub)}</span>
+          {hasMin && <span style={s.minTag}>MIN</span>}
+          {canRemove && <button type="button" onClick={onRemove} style={s.xBtn}>✕</button>}
+        </div>
+      </div>
+      <div style={{ marginBottom:12 }}>
+        <label style={s.fieldLbl}>Diameter</label>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <input type="number" min="1" max="120" step="0.5" placeholder="0"
+            value={stump.diameter} onChange={e => onChange("diameter", e.target.value)}
+            style={s.diamIn} />
+          <span style={{ color:MUTED, fontSize:13 }}>inches</span>
+          {stump.diameter > 0 && (
+            <span style={s.baseHint}>${(parseFloat(stump.diameter)*5).toFixed(0)} base</span>
+          )}
+        </div>
+      </div>
+      <Segs label="Wood"    value={stump.difficulty} onChange={v=>onChange("difficulty",v)} options={DIFFICULTY_OPTS} />
+      <Segs label="Access"  value={stump.access}     onChange={v=>onChange("access",v)}     options={ACCESS_OPTS} />
+      <Segs label="Depth"   value={stump.depth}      onChange={v=>onChange("depth",v)}      options={DEPTH_OPTS} />
+      <Segs label="Cleanup" value={stump.cleanup}    onChange={v=>onChange("cleanup",v)}    options={CLEANUP_OPTS} />
+      <input type="text" placeholder="Notes (optional)" value={stump.notes}
+        onChange={e => onChange("notes", e.target.value)} style={s.notesIn} />
+    </div>
+  );
+}
+
+// ── Summary ──────────────────────────────────────────────────────────────
+function Summary({ stumps }) {
+  const sum   = stumps.reduce((a,s) => a + calcStump(s), 0);
+  const total = Math.max(sum, MIN_PER_JOB);
+  return (
+    <div style={s.summCard}>
+      <div style={s.summTitle}>Summary</div>
+      {stumps.map((st, i) => {
+        const sub = calcStump(st);
+        if (!st.diameter) return null;
+        const tags = [
+          st.difficulty !== "normal"  ? DIFFICULTY_OPTS.find(o=>o.value===st.difficulty)?.label : null,
+          st.access !== "open"        ? ACCESS_OPTS.find(o=>o.value===st.access)?.label         : null,
+          st.depth !== "standard"     ? DEPTH_OPTS.find(o=>o.value===st.depth)?.label           : null,
+          st.cleanup !== "none"       ? CLEANUP_OPTS.find(o=>o.value===st.cleanup)?.label       : null,
+        ].filter(Boolean);
+        return (
+          <div key={st.id} style={s.summRow}>
+            <span style={s.summItem}>
+              Stump {i+1} — {st.diameter}"
+              {tags.length > 0 && <span style={{ color:MUTED }}> · {tags.join(" · ")}</span>}
+            </span>
+            <span style={s.summAmt}>{fmt(sub)}</span>
+          </div>
+        );
+      })}
+      <div style={s.divider}/>
+      {total > sum && (
+        <div style={{ ...s.summRow, fontSize:12, color:MUTED, fontStyle:"italic" }}>
+          <span>Job minimum applied</span><span>{fmt(MIN_PER_JOB)}</span>
+        </div>
+      )}
+      <div style={s.totalRow}><span>Total</span><span>{fmt(total)}</span></div>
+    </div>
+  );
+}
+
+// ── Photo Upload ─────────────────────────────────────────────────────────
+function PhotoUpload({ estimateId, apiBase, photos, onPhotosChange }) {
+  const fileRef    = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [error,     setError]     = useState(null);
+
+  async function handleFiles(files) {
+    if (!files.length) return;
+    setError(null);
+    setUploading(true);
     try {
-      const res = await fetch(`${API_BASE}/estimates`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, amount: parseFloat(form.amount), photos, customer_id: customerId }),
+      const formData = new FormData();
+      Array.from(files).forEach(f => formData.append("photos", f));
+      const res = await fetch(`${apiBase}/estimates/${estimateId}/photos`, {
+        method: "POST", body: formData,
       });
-      const est = await res.json();
-      onSave(est);
-    } finally { setSaving(false); }
-  };
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      onPhotosChange([...photos, ...data]);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function updateCaption(photoId, caption) {
+    // Optimistic update locally (caption editing is cosmetic, no DB endpoint needed for now)
+    onPhotosChange(photos.map(p => p.id === photoId ? { ...p, caption } : p));
+  }
+
+  async function removePhoto(photoId) {
+    try {
+      await fetch(`${apiBase}/estimates/${estimateId}/photos/${photoId}`, { method: "DELETE" });
+      onPhotosChange(photos.filter(p => p.id !== photoId));
+    } catch {
+      setError("Failed to remove photo");
+    }
+  }
 
   return (
     <div>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px" }}>← Back</button>
-      <SectionHeader title="Send Estimate" />
-      <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
-        <div>
-          <label style={labelStyle}>Customer *</label>
-          <CustomerSelector
-            initialName={form.customer_name}
-            onSelect={(c) => { if (c) { set("customer_name", c.name); set("phone", c.phone || ""); set("email", c.email || ""); set("address", c.address || ""); setCustomerId(c.id); } else { set("customer_name", ""); setCustomerId(null); } }}
-            placeholder="Search existing or type new name..."
-          />
-          {!form.customer_name && <input style={{ ...inputStyle, marginTop: "8px" }} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Or type name manually *" />}
-        </div>
-        <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
-        <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
-        <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St, Charleston, WV" /></div>
-        <div><label style={labelStyle}>Description</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={form.description} onChange={e => set("description", e.target.value)} placeholder="Work to be performed..." /></div>
-        <div><label style={labelStyle}>Amount * ($)</label><input style={inputStyle} type="number" step="0.01" value={form.amount} onChange={e => set("amount", e.target.value)} placeholder="0.00" /></div>
-        <div><label style={labelStyle}>Internal Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Notes visible to customer..." /></div>
-        <div>
-          <label style={labelStyle}>Photos</label>
-          <PhotoUpload photos={photos} onChange={setPhotos} />
-        </div>
+      {/* Drop zone / tap to add */}
+      <div
+        style={{ ...s.dropZone, ...(uploading ? { opacity: 0.6 } : {}) }}
+        onClick={() => !uploading && fileRef.current?.click()}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+      >
+        {uploading ? (
+          <span style={{ color:MUTED }}>Uploading…</span>
+        ) : (
+          <>
+            <span style={s.dropIcon}>📷</span>
+            <span style={s.dropLabel}>Tap to add photos</span>
+            <span style={s.dropSub}>Camera or gallery · up to 10 photos</span>
+          </>
+        )}
       </div>
-      {form.phone && (
-        <div style={{ fontSize: "12px", color: COLORS.textMuted, marginBottom: "16px", padding: "10px 12px", background: COLORS.surface, borderRadius: "6px", border: `1px solid ${COLORS.border}` }}>
-          📱 SMS approval link will be sent to {form.phone}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        capture="environment"
+        style={{ display:"none" }}
+        onChange={e => handleFiles(e.target.files)}
+      />
+
+      {error && <div style={s.errBox}>{error}</div>}
+
+      {/* Photo grid */}
+      {photos.length > 0 && (
+        <div style={s.photoGrid}>
+          {photos.map(p => (
+            <div key={p.id} style={s.photoItem}>
+              <div style={s.photoImgWrap}>
+                <img
+                  src={p.cloudinary_url}
+                  alt={p.caption || "Job photo"}
+                  style={s.photoImg}
+                />
+                <button type="button" onClick={() => removePhoto(p.id)} style={s.photoRemove}>✕</button>
+              </div>
+              {/* Caption — tap suggestion chips or type */}
+              <div style={s.captionRow}>
+                {CAPTION_SUGGESTIONS.map(c => (
+                  <button key={c} type="button"
+                    onClick={() => updateCaption(p.id, c)}
+                    style={{ ...s.captionChip, ...(p.caption === c ? s.captionChipOn : {}) }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
-      <button onClick={handleSave} disabled={saving || !form.customer_name || !form.amount} style={{ width: "100%", padding: "14px", borderRadius: "8px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800, cursor: "pointer", opacity: saving || !form.customer_name || !form.amount ? 0.6 : 1 }}>
-        {saving ? "Sending..." : form.phone ? "Send Estimate via SMS" : "Create Estimate"}
+    </div>
+  );
+}
+
+// ── Signature Pad ────────────────────────────────────────────────────────
+function SignaturePad({ onCapture, onClear }) {
+  const canvasRef = useRef(null);
+  const drawing   = useRef(false);
+  const lastPos   = useRef(null);
+
+  function getPos(e, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const src  = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - rect.left) * (canvas.width / rect.width),
+             y: (src.clientY - rect.top)  * (canvas.height / rect.height) };
+  }
+  function start(e) { e.preventDefault(); drawing.current = true; lastPos.current = getPos(e, canvasRef.current); }
+  function draw(e) {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const canvas = canvasRef.current; const ctx = canvas.getContext("2d");
+    const pos = getPos(e, canvas);
+    ctx.beginPath(); ctx.strokeStyle = "#c4a43e"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    ctx.moveTo(lastPos.current.x, lastPos.current.y); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+    lastPos.current = pos;
+  }
+  function stop(e) { e.preventDefault(); drawing.current = false; onCapture(canvasRef.current.toDataURL()); }
+  function clear() { canvasRef.current.getContext("2d").clearRect(0,0,640,160); onClear(); }
+
+  return (
+    <div>
+      <div style={s.sigLbl}>Customer Signature</div>
+      <div style={s.sigWrap}>
+        <canvas ref={canvasRef} width={640} height={160} style={s.sigCanvas}
+          onMouseDown={start} onMouseMove={draw} onMouseUp={stop} onMouseLeave={stop}
+          onTouchStart={start} onTouchMove={draw} onTouchEnd={stop} />
+        <span style={s.sigHint}>Sign above</span>
+      </div>
+      <button type="button" onClick={clear} style={s.clearBtn}>Clear</button>
+    </div>
+  );
+}
+
+// ── On-Site Modal ────────────────────────────────────────────────────────
+function OnsiteModal({ estimate, apiBase, onSuccess, onClose }) {
+  const [sigData, setSigData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  async function confirm(withSig) {
+    setError(null); setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/estimates/${estimate.id}/accept-onsite`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ signature_data: withSig ? sigData : null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      onSuccess(data);
+    } catch (err) { setError(err.message); setLoading(false); }
+  }
+
+  return (
+    <div style={s.overlay}>
+      <div style={s.modal}>
+        <div style={s.modalHead}>
+          <span style={{ fontWeight:800, fontSize:17 }}>Accept On-Site</span>
+          <button type="button" onClick={onClose} style={s.modalClose}>✕</button>
+        </div>
+        <div style={{ padding:"0 20px 24px" }}>
+          <div style={{ fontSize:14, color:MUTED, margin:"10px 0 20px" }}>
+            {estimate.customer_name} · {fmt(estimate.total_amount)}
+          </div>
+          <SignaturePad onCapture={setSigData} onClear={() => setSigData(null)} />
+          {error && <div style={s.errBox}>{error}</div>}
+          <button type="button" onClick={() => confirm(true)}
+            disabled={loading || !sigData}
+            style={{ ...s.confirmBtn, opacity: (!sigData || loading) ? 0.5 : 1, marginTop:16 }}>
+            {loading ? "Processing…" : "✓ Confirm with Signature"}
+          </button>
+          <button type="button" onClick={() => confirm(false)}
+            style={{ ...s.confirmBtn, background:"#333", marginTop:8 }}>
+            Accept Without Signature
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Success Screen ───────────────────────────────────────────────────────
+function SuccessScreen({ mode, customerName, invoiceNumber, onDone }) {
+  return (
+    <div style={s.successWrap}>
+      <div style={{ fontSize:64, marginBottom:16 }}>{mode === "sent" ? "📨" : "✅"}</div>
+      <div style={{ fontSize:26, fontWeight:900, marginBottom:8 }}>
+        {mode === "sent" ? "Estimate Sent!" : "Accepted!"}
+      </div>
+      <div style={{ fontSize:15, color:MUTED, lineHeight:1.5, marginBottom:16 }}>
+        {mode === "sent"
+          ? `${customerName} will get a text with an approval link.`
+          : `Job and invoice created. Added to schedule queue.`}
+      </div>
+      {invoiceNumber && (
+        <div style={{ fontSize:14, color:GOLD, fontWeight:700, marginBottom:24 }}>
+          Invoice {invoiceNumber}
+        </div>
+      )}
+      <button type="button" onClick={onDone} style={s.doneBtn}>
+        View Schedule Queue →
       </button>
     </div>
   );
 }
+
+// ── MAIN ─────────────────────────────────────────────────────────────────
+function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
+  const [phase,      setPhase]      = useState("build");
+  const [stumps,     setStumps]     = useState([newStump(0)]);
+  const [customer,   setCustomer]   = useState({
+    name: lead?.name||"", phone: lead?.phone||"",
+    email: lead?.email||"", address: lead?.address||"",
+  });
+  const [notes,      setNotes]      = useState("");
+  const [saving,     setSaving]     = useState(false);
+  const [sending,    setSending]    = useState(false);
+  const [error,      setError]      = useState(null);
+  const [estimate,   setEstimate]   = useState(null);
+  const [photos,     setPhotos]     = useState([]);
+  const [result,     setResult]     = useState(null);
+  const [mode,       setMode]       = useState(null);
+  const [showOnsite, setShowOnsite] = useState(false);
+
+  const addStump    = () => setStumps(p => [...p, newStump(p.length)]);
+  const removeStump = id  => setStumps(p => p.filter(s => s.id !== id));
+  const updateStump = useCallback((id, f, v) =>
+    setStumps(p => p.map(s => s.id === id ? { ...s, [f]: v } : s)), []);
+
+  async function handleSave() {
+    setError(null);
+    if (!customer.name || !customer.phone) { setError("Name and phone required."); return; }
+    if (stumps.some(s => !s.diameter || parseFloat(s.diameter) <= 0)) { setError("All stumps need a diameter."); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(`${apiBase}/estimates`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          lead_id: lead?.id||null,
+          customer_name: customer.name, customer_phone: customer.phone,
+          customer_email: customer.email||null, address: customer.address||null,
+          notes: notes||null,
+          stumps: stumps.map(s => ({
+            diameter_inches: parseFloat(s.diameter),
+            difficulty: s.difficulty, access: s.access,
+            depth: s.depth, cleanup: s.cleanup, notes: s.notes||null,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setEstimate(data);
+      setPhotos(data.photos || []);
+      setPhase("saved");
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  }
+
+  async function handleSend() {
+    setSending(true); setError(null);
+    try {
+      const res = await fetch(`${apiBase}/estimates/${estimate.id}/send`, { method:"POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Send failed");
+      setMode("sent"); setResult(data); setPhase("success");
+    } catch (err) { setError(err.message); }
+    finally { setSending(false); }
+  }
+
+  if (phase === "success") {
+    return (
+      <div style={s.root}>
+        <SuccessScreen
+          mode={mode} customerName={customer.name}
+          invoiceNumber={result?.invoiceNumber}
+          onDone={() => onDone?.(result)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={s.root}>
+      <div style={s.header}>
+        <button type="button" onClick={onCancel} style={s.backBtn}>← Back</button>
+        <h1 style={s.title}>{phase === "saved" ? "Estimate Ready" : "New Estimate"}</h1>
+        <div style={s.headerAmt}>
+          {fmt(phase === "saved" ? estimate?.total_amount ?? 0 : calcJob(stumps))}
+        </div>
+      </div>
+
+      <div style={s.body}>
+
+        {/* ══ BUILD ══════════════════════════════════════════════════════ */}
+        {phase === "build" && (<>
+          <section style={s.sec}>
+            <h2 style={s.secHead}>Customer</h2>
+            {[{k:"name",ph:"Full Name *",t:"text"},{k:"phone",ph:"Phone *",t:"tel"},
+              {k:"email",ph:"Email (optional)",t:"email"},{k:"address",ph:"Service Address",t:"text"}]
+              .map(f => (
+                <input key={f.k} type={f.t} placeholder={f.ph} value={customer[f.k]}
+                  onChange={e=>setCustomer(p=>({...p,[f.k]:e.target.value}))} style={s.input}/>
+              ))}
+          </section>
+
+          <section style={s.sec}>
+            <h2 style={s.secHead}>
+              Stumps <span style={s.cntBadge}>{stumps.length}</span>
+            </h2>
+            {stumps.map((st, i) => (
+              <StumpCard key={st.id} stump={st} index={i}
+                onChange={(f,v)=>updateStump(st.id,f,v)}
+                onRemove={()=>removeStump(st.id)}
+                canRemove={stumps.length>1}/>
+            ))}
+            <button type="button" onClick={addStump} style={s.addBtn}>+ Add Stump</button>
+          </section>
+
+          <section style={s.sec}>
+            <h2 style={s.secHead}>Job Notes</h2>
+            <textarea style={{...s.input,height:72,resize:"vertical"}}
+              placeholder="Access notes, scheduling preferences, etc."
+              value={notes} onChange={e=>setNotes(e.target.value)}/>
+          </section>
+
+          <Summary stumps={stumps}/>
+
+          {error && <div style={s.errBox}>{error}</div>}
+
+          <div style={{ marginTop:20, display:"flex", flexDirection:"column", gap:10 }}>
+            <button type="button" onClick={handleSave} disabled={saving}
+              style={{...s.saveBtn, opacity:saving?0.6:1}}>
+              {saving?"Saving…":"Save Estimate"}
+            </button>
+            <button type="button" onClick={onCancel} style={s.cancelBtn}>Cancel</button>
+          </div>
+        </>)}
+
+        {/* ══ SAVED ══════════════════════════════════════════════════════ */}
+        {phase === "saved" && estimate && (<>
+
+          {/* Recap */}
+          <div style={s.savedCard}>
+            {[
+              ["Customer", estimate.customer_name],
+              ["Phone",    estimate.customer_phone],
+              ...(estimate.address ? [["Address", estimate.address]] : []),
+              ["Stumps",   estimate.stump_count],
+            ].map(([label, val]) => (
+              <div key={label} style={s.savedRow}>
+                <span style={s.savedLbl}>{label}</span>
+                <span style={s.savedVal}>{val}</span>
+              </div>
+            ))}
+            <div style={{ ...s.savedRow, borderBottom:"none" }}>
+              <span style={s.savedLbl}>Total</span>
+              <span style={{ ...s.savedVal, color:GOLD, fontWeight:900, fontSize:22 }}>
+                {fmt(estimate.total_amount)}
+              </span>
+            </div>
+          </div>
+
+          {/* Photos */}
+          <section style={s.sec}>
+            <h2 style={s.secHead}>
+              Job Photos
+              {photos.length > 0 && <span style={s.cntBadge}>{photos.length}</span>}
+            </h2>
+            <PhotoUpload
+              estimateId={estimate.id}
+              apiBase={apiBase}
+              photos={photos}
+              onPhotosChange={setPhotos}
+            />
+          </section>
+
+          {/* Actions */}
+          <div style={{ marginTop:8 }}>
+            <div style={{ fontSize:12,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:MUTED,margin:"16px 0 12px" }}>
+              What would you like to do?
+            </div>
+
+            <button type="button" onClick={handleSend} disabled={sending}
+              style={{...s.actionBtn, background:"#0d2a45", border:"1px solid #1a4a70", opacity:sending?0.6:1}}>
+              <span style={{ fontSize:24 }}>📱</span>
+              <div>
+                <div style={s.btnMain}>{sending?"Sending…":"Send to Customer"}</div>
+                <div style={s.btnSub}>Text approval link to {estimate.customer_phone}</div>
+              </div>
+            </button>
+
+            <button type="button" onClick={() => setShowOnsite(true)}
+              style={{...s.actionBtn, background:"#0d2a1a", border:"1px solid #1a4a2a"}}>
+              <span style={{ fontSize:24 }}>✍️</span>
+              <div>
+                <div style={s.btnMain}>Accept On-Site</div>
+                <div style={s.btnSub}>Customer is present — capture signature &amp; convert now</div>
+              </div>
+            </button>
+
+            <button type="button" onClick={() => onCancel?.()} style={s.laterBtn}>
+              Save for Later
+            </button>
+          </div>
+
+          {error && <div style={s.errBox}>{error}</div>}
+        </>)}
+      </div>
+
+      {showOnsite && (
+        <OnsiteModal estimate={estimate} apiBase={apiBase}
+          onSuccess={data => { setShowOnsite(false); setMode("onsite"); setResult(data); setPhase("success"); }}
+          onClose={() => setShowOnsite(false)}/>
+      )}
+    </div>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────
+const GOLD = "#c4a43e"; const BG = "#111"; const CARD = "#1a1a1a";
+const BORD = "#2a2a2a"; const TEXT = "#f0ece4"; const MUTED = "#777";
+
+const s = {
+  root:      { background:BG, minHeight:"100vh", color:TEXT, fontFamily:"'DM Sans',sans-serif", maxWidth:520, margin:"0 auto" },
+  header:    { position:"sticky", top:0, zIndex:10, background:BG, borderBottom:`1px solid ${BORD}`, padding:"14px 16px", display:"flex", alignItems:"center", gap:12 },
+  backBtn:   { background:"none", border:"none", color:GOLD, fontSize:15, cursor:"pointer", fontFamily:"inherit" },
+  title:     { flex:1, margin:0, fontSize:18, fontWeight:700 },
+  headerAmt: { fontSize:20, fontWeight:900, color:GOLD },
+  body:      { padding:"0 16px 100px" },
+  sec:       { marginTop:24 },
+  secHead:   { fontSize:12, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", color:MUTED, margin:"0 0 10px", display:"flex", alignItems:"center", gap:8 },
+  cntBadge:  { background:GOLD, color:"#000", borderRadius:"50%", width:20, height:20, display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900 },
+  input:     { width:"100%", background:CARD, border:`1px solid ${BORD}`, borderRadius:8, color:TEXT, fontSize:15, padding:"12px 14px", marginBottom:8, boxSizing:"border-box", fontFamily:"inherit", outline:"none" },
+  card:      { background:CARD, border:`1px solid ${BORD}`, borderRadius:12, padding:"14px 14px 10px", marginBottom:12 },
+  cardHead:  { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 },
+  numBadge:  { background:GOLD, color:"#000", borderRadius:"50%", width:24, height:24, display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:900 },
+  subAmt:    { fontSize:18, fontWeight:900, color:GOLD },
+  minTag:    { fontSize:9, fontWeight:800, background:"#333", color:MUTED, borderRadius:4, padding:"2px 5px" },
+  xBtn:      { background:"none", border:`1px solid ${BORD}`, borderRadius:6, color:MUTED, cursor:"pointer", padding:"2px 8px", fontSize:12, fontFamily:"inherit" },
+  fieldLbl:  { fontSize:11, color:MUTED, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase", display:"block", marginBottom:6 },
+  diamIn:    { background:"#222", border:`1px solid ${BORD}`, borderRadius:8, color:TEXT, fontSize:28, fontWeight:900, padding:"8px 14px", width:110, fontFamily:"inherit", outline:"none" },
+  baseHint:  { fontSize:11, color:MUTED },
+  segWrap:   { marginBottom:10 },
+  segLbl:    { fontSize:11, color:MUTED, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase", display:"block", marginBottom:5 },
+  segs:      { display:"flex", gap:4, flexWrap:"wrap" },
+  seg:       { background:"#222", border:`1px solid ${BORD}`, borderRadius:6, color:MUTED, cursor:"pointer", fontSize:11, fontWeight:500, padding:"6px 10px", fontFamily:"inherit", whiteSpace:"nowrap" },
+  segOn:     { background:GOLD, borderColor:GOLD, color:"#000", fontWeight:800 },
+  badge:     { fontSize:9, opacity:0.75 },
+  notesIn:   { width:"100%", background:"#1e1e1e", border:`1px solid ${BORD}`, borderRadius:6, color:MUTED, fontSize:12, padding:"8px 10px", marginTop:6, boxSizing:"border-box", fontFamily:"inherit", outline:"none" },
+  addBtn:    { width:"100%", background:"transparent", border:`2px dashed ${BORD}`, borderRadius:10, color:GOLD, cursor:"pointer", fontSize:14, fontWeight:700, padding:14, fontFamily:"inherit", marginTop:4 },
+  summCard:  { background:"#161616", border:`1px solid ${GOLD}33`, borderRadius:12, padding:16, marginTop:24 },
+  summTitle: { fontSize:12, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", color:MUTED, marginBottom:12 },
+  summRow:   { display:"flex", justifyContent:"space-between", gap:8, marginBottom:8, fontSize:13 },
+  summItem:  { color:MUTED, flex:1, lineHeight:1.4 },
+  summAmt:   { fontWeight:700, color:TEXT },
+  divider:   { borderTop:`1px solid ${BORD}`, margin:"10px 0" },
+  totalRow:  { display:"flex", justifyContent:"space-between", fontSize:22, fontWeight:900, color:GOLD },
+  errBox:    { background:"#2a1111", border:"1px solid #5a2020", borderRadius:8, color:"#f87171", fontSize:13, padding:"12px 14px", marginTop:16 },
+  saveBtn:   { background:"#2e7d32", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", fontSize:16, fontWeight:800, padding:16, fontFamily:"inherit" },
+  cancelBtn: { background:"transparent", border:`1px solid ${BORD}`, borderRadius:10, color:MUTED, cursor:"pointer", fontSize:14, padding:12, fontFamily:"inherit" },
+  savedCard: { background:CARD, border:`1px solid ${BORD}`, borderRadius:12, padding:"4px 16px", marginTop:20 },
+  savedRow:  { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 0", borderBottom:`1px solid ${BORD}` },
+  savedLbl:  { fontSize:12, color:MUTED, fontWeight:600 },
+  savedVal:  { fontSize:14, fontWeight:600 },
+  // photos
+  dropZone:  { border:`2px dashed ${BORD}`, borderRadius:10, padding:"24px 16px", textAlign:"center", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:4 },
+  dropIcon:  { fontSize:32 },
+  dropLabel: { fontSize:14, fontWeight:700, color:TEXT },
+  dropSub:   { fontSize:12, color:MUTED },
+  photoGrid: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:12 },
+  photoItem: { display:"flex", flexDirection:"column", gap:4 },
+  photoImgWrap: { position:"relative" },
+  photoImg:  { width:"100%", aspectRatio:"4/3", objectFit:"cover", borderRadius:8, display:"block" },
+  photoRemove: { position:"absolute", top:4, right:4, background:"rgba(0,0,0,0.7)", border:"none", color:"#fff", borderRadius:"50%", width:22, height:22, fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"inherit" },
+  captionRow: { display:"flex", gap:4, flexWrap:"wrap" },
+  captionChip: { background:"#222", border:`1px solid ${BORD}`, borderRadius:20, color:MUTED, cursor:"pointer", fontSize:10, fontWeight:600, padding:"3px 8px", fontFamily:"inherit" },
+  captionChipOn: { background:GOLD, borderColor:GOLD, color:"#000" },
+  // action buttons
+  actionBtn: { width:"100%", borderRadius:12, color:TEXT, cursor:"pointer", fontSize:14, fontFamily:"inherit", padding:"16px 14px", marginBottom:10, display:"flex", alignItems:"center", gap:14, textAlign:"left" },
+  btnMain:   { fontWeight:800, fontSize:15 },
+  btnSub:    { fontSize:12, color:MUTED, marginTop:2 },
+  laterBtn:  { width:"100%", background:"transparent", border:`1px solid ${BORD}`, borderRadius:10, color:MUTED, cursor:"pointer", fontSize:14, padding:12, fontFamily:"inherit" },
+  // modal
+  overlay:   { position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:100, display:"flex", alignItems:"flex-end" },
+  modal:     { background:"#1a1a1a", borderRadius:"16px 16px 0 0", width:"100%", maxWidth:520, margin:"0 auto", paddingBottom:20 },
+  modalHead: { display:"flex", justifyContent:"space-between", alignItems:"center", padding:"18px 20px 12px", borderBottom:`1px solid ${BORD}` },
+  modalClose:{ background:"none", border:"none", color:MUTED, fontSize:20, cursor:"pointer" },
+  confirmBtn:{ width:"100%", background:"#2e7d32", border:"none", borderRadius:10, color:"#fff", cursor:"pointer", fontSize:16, fontWeight:800, padding:16, fontFamily:"inherit" },
+  // signature
+  sigLbl:    { fontSize:11, color:MUTED, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:8 },
+  sigWrap:   { position:"relative", background:"#111", borderRadius:10, border:`1px solid ${BORD}`, overflow:"hidden" },
+  sigCanvas: { display:"block", width:"100%", touchAction:"none" },
+  sigHint:   { position:"absolute", bottom:8, left:"50%", transform:"translateX(-50%)", fontSize:11, color:"#333", pointerEvents:"none" },
+  clearBtn:  { background:"none", border:"none", color:MUTED, fontSize:12, cursor:"pointer", padding:"4px 0", fontFamily:"inherit" },
+  // success
+  successWrap: { display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"80vh", padding:32, textAlign:"center" },
+  doneBtn:   { background:GOLD, border:"none", borderRadius:10, color:"#000", cursor:"pointer", fontSize:16, fontWeight:800, padding:"14px 28px", fontFamily:"inherit" },
+};
+
+
 
 // ============================================================
 // NEW INVOICE FORM
@@ -1810,10 +2398,17 @@ function StumpProsApp() {
         return <BillingScreen estimates={estimates} invoices={invoices} onNavigate={navigate} />;
       case "new-estimate":
         return (
-          <NewEstimateScreen
-            onBack={() => navigate("billing")}
-            onSave={() => { loadData(); navigate("billing"); }}
-            initialData={selectedItem}
+          <EstimateBuilder
+            lead={selectedItem ? {
+              id: selectedItem.lead_id || null,
+              name: selectedItem.customer_name || "",
+              phone: selectedItem.phone || "",
+              email: selectedItem.email || "",
+              address: selectedItem.address || "",
+            } : null}
+            onDone={() => { loadData(); navigate("billing"); }}
+            onCancel={() => navigate("billing")}
+            apiBase={API_BASE}
           />
         );
       case "estimate-detail":
@@ -1897,7 +2492,11 @@ function StumpProsApp() {
     }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
+<<<<<<< Updated upstream
       <div className="app-content" style={{ flex: 1, overflowY: "auto" }}>
+=======
+      <div style={{ flex: 1, padding: "calc(20px + env(safe-area-inset-top)) 16px 100px 16px", overflowY: "auto" }}>
+>>>>>>> Stashed changes
         {renderScreen()}
       </div>
 

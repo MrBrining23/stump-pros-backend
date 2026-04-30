@@ -11,7 +11,7 @@ const settingsRouter = require('./routes/settings');
 const smsRouter = require('./routes/sms');
 const quickbooksRouter = require('./routes/quickbooks');
 const webhooksRouter = require('./routes/webhooks');
-const { estimatesRouter, responseRouter } = require('./routes/estimates');
+const estimatesRouter = require('./routes/estimates');
 const invoicesRouter = require('./routes/invoices');
 const customersRouter = require('./routes/customers');
 const { startCronJobs } = require('./services/cron');
@@ -35,7 +35,7 @@ app.use('/api/sms', smsRouter);
 app.use('/api/quickbooks', quickbooksRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/estimates', estimatesRouter);
-app.use('/api/estimate-response', responseRouter);
+app.use('/approve', estimatesRouter);  // customer-facing approval links
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/customers', customersRouter);
 
