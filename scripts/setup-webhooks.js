@@ -82,10 +82,11 @@ async function main() {
   // ── 2. Verify token works ─────────────────────────────────────────────
   head('Step 2: Verify Meta Token');
   try {
-    const res  = await fetch(`https://graph.facebook.com/v21.0/${META_PAGE_ID}?fields=name,id&access_token=${PAGE_ACCESS_TOKEN}`);
+    // Use /me to verify the token is valid (works for both user and page tokens)
+    const res  = await fetch(`https://graph.facebook.com/v21.0/me?fields=name,id&access_token=${PAGE_ACCESS_TOKEN}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
-    ok(`Token valid — Page: "${data.name}" (${data.id})`);
+    ok(`Token valid — Account: "${data.name}" (${data.id})`);
   } catch (e) {
     err(`Token verification failed: ${e.message}`);
     console.log('  Your META_PAGE_ACCESS_TOKEN may be expired or have wrong permissions.');
