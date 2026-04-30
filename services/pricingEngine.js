@@ -43,7 +43,7 @@ async function loadPricingConfig() {
       'difficulty_multipliers', 'access_multipliers', 'depth_multipliers', 'cleanup_multipliers',
     ];
     const { rows } = await pool.query(
-      `SELECT key, value FROM settings WHERE key = ANY($1)`,
+      `SELECT key, value FROM pricing_config WHERE key = ANY($1)`,
       [keys]
     );
 

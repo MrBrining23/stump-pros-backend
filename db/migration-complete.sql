@@ -8,9 +8,10 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================================
--- SETTINGS (needed by other tables)
+-- PRICING CONFIG (key-value store for pricing settings)
+-- Separate from the existing settings table (single-row model)
 -- ============================================================
-CREATE TABLE IF NOT EXISTS settings (
+CREATE TABLE IF NOT EXISTS pricing_config (
   id          SERIAL PRIMARY KEY,
   key         TEXT UNIQUE NOT NULL,
   value       TEXT,
@@ -231,25 +232,17 @@ CREATE TABLE IF NOT EXISTS review_requests (
 );
 
 -- ============================================================
--- PRICING SETTINGS (upsert — safe to re-run)
+-- PRICING CONFIG SEED (upsert — safe to re-run)
 -- ============================================================
-INSERT INTO settings (key, value, description) VALUES
+INSERT INTO pricing_config (key, value, description) VALUES
   ('price_per_inch',         '5.00',                                          'Base price per inch of stump diameter ($)'),
   ('min_charge_per_stump',   '50.00',                                         'Minimum charge per individual stump ($)'),
   ('min_charge_per_job',     '225.00',                                        'Minimum total job charge ($)'),
   ('difficulty_multipliers', '{"normal":1.0,"hard":1.25,"very_dense":1.5}',  'Multipliers by wood hardness'),
   ('access_multipliers',     '{"open":1.0,"limited":1.25,"very_limited":1.5}','Multipliers by site access'),
   ('depth_multipliers',      '{"standard":1.0,"extra_deep":1.25}',           'Multipliers by grinding depth'),
-  ('cleanup_multipliers',    '{"none":1.0,"chips_only":1.5,"full_cleanup":2.0}','Multipliers by cleanup level'),
-  ('business_name',          'Stump Pros WV',                                 'Business name'),
-  ('business_phone',         '304-712-2005',                                  'Business phone'),
-  ('business_website',       'stumpproswv.com',                               'Business website'),
-  ('owner_phone',            '',                                               'Owner cell for notifications'),
-  ('google_review_url',      '',                                               'Google Business Profile review link'),
-  ('facebook_review_url',    '',                                               'Facebook review link'),
-  ('review_request_delay_hours', '24',                                        'Hours after job completion to send review request'),
-  ('auto_text_template',     'Hey {{name}}, thanks for reaching out to Stump Pros WV! How many stumps do you need removed? Would you prefer an in-person quote, or would you rather send us some pictures to get started?', 'Auto-response SMS template')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value WHERE settings.value = '';
+  ('cleanup_multipliers',    '{"none":1.0,"chips_only":1.5,"full_cleanup":2.0}','Multipliers by cleanup level')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value WHERE pricing_config.value = '';
 
 -- ============================================================
 -- INDEXES
