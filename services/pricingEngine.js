@@ -129,7 +129,9 @@ function calculateJob(stumps, config) {
 
   const stump_subtotal = Math.round(priced.reduce((sum, s) => sum + s.subtotal, 0) * 100) / 100;
   const job_minimum_applied = stump_subtotal < minPerJob;
-  const job_total = job_minimum_applied ? minPerJob : stump_subtotal;
+  // Round job_total UP to the nearest $25 interval (stump_subtotal stays unrounded for display)
+  const raw_total = job_minimum_applied ? minPerJob : stump_subtotal;
+  const job_total = Math.ceil(raw_total / 25) * 25;
 
   return { stumps: priced, stump_subtotal, job_total, job_minimum_applied };
 }

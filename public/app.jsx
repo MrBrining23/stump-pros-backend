@@ -248,36 +248,32 @@ function JobCard({ job, onClick }) {
 // ESTIMATE CARD
 // ============================================================
 function EstimateCard({ estimate, onClick }) {
-  const statusColor = {
-    pending: COLORS.accent,
-    approved: COLORS.green,
-    declined: COLORS.red,
-    discount_offered: COLORS.blue,
-    discount_approved: COLORS.green,
-    expired: COLORS.textMuted,
-  }[estimate.status] || COLORS.textMuted;
-
   return (
-    <Card onClick={onClick}>
+    <div onClick={onClick} style={{
+      background: COLORS.surface, borderRadius: "10px", padding: "14px",
+      border: `1px solid ${COLORS.border}`, borderLeft: `4px solid ${COLORS.accent}`,
+      cursor: "pointer",
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
-        <div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
+            <span style={{ fontSize: "10px", fontWeight: 800, letterSpacing: "0.08em", color: COLORS.accent, textTransform: "uppercase" }}>📋 ESTIMATE</span>
+          </div>
           <div style={{ fontSize: "14px", fontWeight: 700, color: COLORS.text }}>{estimate.customer_name}</div>
           {estimate.address && <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "2px" }}>📍 {estimate.address}</div>}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
           <StatusBadge status={estimate.status} />
-          <span style={{ fontSize: "13px", fontWeight: 700, color: COLORS.accent }}>{formatCurrency(estimate.amount)}</span>
+          <span style={{ fontSize: "14px", fontWeight: 800, color: COLORS.accent }}>
+            {formatCurrency(estimate.total_amount || estimate.amount)}
+          </span>
         </div>
       </div>
-      {estimate.description && (
-        <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {estimate.description}
-        </div>
-      )}
-      <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "6px" }}>
+      <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "4px" }}>
         {estimate.sent_at ? `Sent ${timeAgo(estimate.sent_at)}` : `Created ${timeAgo(estimate.created_at)}`}
+        {estimate.stump_count ? ` · ${estimate.stump_count} stump${estimate.stump_count > 1 ? "s" : ""}` : ""}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -1681,6 +1677,17 @@ function DashboardScreen({ leads, jobs, estimates, invoices, onNavigate }) {
         </Card>
       </div>
 
+      {/* Quick action */}
+      <button onClick={() => onNavigate("new-estimate")} style={{
+        width: "100%", padding: "14px 16px", borderRadius: "10px",
+        border: `2px solid ${COLORS.accent}40`, background: `${COLORS.accent}10`,
+        color: COLORS.accent, fontSize: "15px", fontWeight: 800, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+        marginBottom: "24px", fontFamily: "inherit",
+      }}>
+        📋 New Estimate
+      </button>
+
       <SectionHeader title="Recent Leads" count={leads.length}
         action={<button onClick={() => onNavigate("leads")} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>View all →</button>}
       />
@@ -1743,7 +1750,12 @@ function JobsScreen({ jobs, onNavigate }) {
   return (
     <div>
       <SectionHeader title="Jobs" count={jobs.length}
-        action={<button onClick={() => onNavigate("new-job")} style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>+ New Job</button>}
+        action={
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={() => onNavigate("new-estimate")} style={{ padding: "6px 14px", borderRadius: "6px", border: `1px solid ${COLORS.accent}`, background: "transparent", color: COLORS.accent, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>📋 New Estimate</button>
+            <button onClick={() => onNavigate("new-job")} style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>+ New Job</button>
+          </div>
+        }
       />
       <div style={{ display: "flex", gap: "6px", marginBottom: "16px", overflowX: "auto", paddingBottom: "4px" }}>
         {["all", "estimate", "scheduled", "in_progress", "completed", "invoiced", "paid"].map(f => (
