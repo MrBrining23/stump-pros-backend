@@ -17,12 +17,12 @@ const pool = require('../db/pool');
 
 const DEFAULTS = {
   price_per_inch:               5.00,
-  large_stump_price_per_inch:   7.00,
+  large_stump_price_per_inch:   6.00,
   min_charge_per_stump:         50.00,
   min_charge_per_job:           225.00,
-  difficulty_multipliers: { normal: 1.0, hard: 1.25, very_dense: 1.5 },
-  access_multipliers:     { open: 1.0, limited: 1.25, very_limited: 1.5 },
-  height_multipliers:     { flush: 1.0, mid: 1.25, tall: 1.5 },
+  difficulty_multipliers: { normal: 1.0, hard: 1.20, very_dense: 1.35 },
+  access_multipliers:     { open: 1.0, limited: 1.20, very_limited: 1.35 },
+  height_multipliers:     { flush: 1.0, mid: 1.20, tall: 1.35 },
   cleanup_multipliers:    { none: 1.0, chips_only: 1.5, full_cleanup: 2.0 },
   roots_multipliers:      { none: 1.0, surface: 1.25, full_yard: 1.6 },
   rocky:                  false,

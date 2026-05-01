@@ -961,13 +961,13 @@ const MIN_PER_JOB    = 225.00;
 
 const DIFFICULTY_OPTS = [
   { value: "normal",     label: "Normal",     mult: 1.00 },
-  { value: "hard",       label: "Hard",       mult: 1.25 },
-  { value: "very_dense", label: "Very Dense", mult: 1.50 },
+  { value: "hard",       label: "Hard",       mult: 1.20 },
+  { value: "very_dense", label: "Very Dense", mult: 1.35 },
 ];
 const ACCESS_OPTS = [
   { value: "open",         label: "Open",         mult: 1.00 },
-  { value: "limited",      label: "Limited",      mult: 1.25 },
-  { value: "very_limited", label: "Very Limited", mult: 1.50 },
+  { value: "limited",      label: "Limited",      mult: 1.20 },
+  { value: "very_limited", label: "Very Limited", mult: 1.35 },
 ];
 const DEPTH_OPTS = [
   { value: "standard",   label: "Standard",  mult: 1.00 },
@@ -975,8 +975,8 @@ const DEPTH_OPTS = [
 ];
 const HEIGHT_OPTS = [
   { value: "flush", label: 'Flush–6"',  mult: 1.00 },
-  { value: "mid",   label: '7–15"',     mult: 1.25 },
-  { value: "tall",  label: '16"+',      mult: 1.50 },
+  { value: "mid",   label: '7–15"',     mult: 1.20 },
+  { value: "tall",  label: '16"+',      mult: 1.35 },
 ];
 const CLEANUP_OPTS = [
   { value: "none",         label: "None",              mult: 1.00 },
@@ -1050,7 +1050,7 @@ function CustomerPickerModal({ onSelect, onClose }) {
 function calcStump(s) {
   const d = parseFloat(s.diameter);
   if (!d || d <= 0) return 0;
-  const rate      = d > 40 ? 7.00 : PRICE_PER_INCH;
+  const rate      = d > 40 ? 6.00 : PRICE_PER_INCH;
   const base      = d * rate;
   const diff      = DIFFICULTY_OPTS.find(o => o.value === s.difficulty)?.mult        ?? 1;
   const acc       = ACCESS_OPTS.find(o => o.value === s.access)?.mult                ?? 1;
@@ -1115,7 +1115,7 @@ function StumpCard({ stump, index, onChange, onRemove, canRemove, photos, onPhot
             style={s.diamIn} />
           <span style={{ color:MUTED, fontSize:13 }}>inches</span>
           {stump.diameter > 0 && (
-            <span style={s.baseHint}>${(parseFloat(stump.diameter) * (parseFloat(stump.diameter) > 40 ? 7 : 5)).toFixed(0)} base</span>
+            <span style={s.baseHint}>${(parseFloat(stump.diameter) * (parseFloat(stump.diameter) > 40 ? 6 : 5)).toFixed(0)} base</span>
           )}
         </div>
       </div>
