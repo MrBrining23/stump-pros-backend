@@ -1061,8 +1061,13 @@ function calcStump(s) {
   const extraDeep = s.extra_deep ? 1.25 : 1.0;
   return Math.max(base * diff * acc * hgt * clean * roots * rocky * extraDeep, MIN_PER_STUMP);
 }
+function volumeDiscount(count) {
+  return count >= 21 ? 0.25 : count >= 11 ? 0.20 : count >= 5 ? 0.15 : 0;
+}
 function calcJob(stumps) {
-  return Math.max(stumps.reduce((a, s) => a + calcStump(s), 0), MIN_PER_JOB);
+  const disc = volumeDiscount(stumps.length);
+  const sum  = stumps.reduce((a, s) => a + calcStump(s) * (1 - disc), 0);
+  return Math.max(sum, MIN_PER_JOB);
 }
 function fmt(n) {
   return `$${n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
@@ -1165,8 +1170,11 @@ function StumpCard({ stump, index, onChange, onRemove, canRemove, photos, onPhot
 
 // ── Summary ──────────────────────────────────────────────────────────────
 function Summary({ stumps }) {
-  const sum   = stumps.reduce((a,s) => a + calcStump(s), 0);
-  const total = Math.max(sum, MIN_PER_JOB);
+  const disc      = volumeDiscount(stumps.length);
+  const preDisc   = stumps.reduce((a,s) => a + calcStump(s), 0);
+  const sum       = preDisc * (1 - disc);
+  const total     = Math.max(sum, MIN_PER_JOB);
+  const rounded   = Math.ceil(total / 25) * 25;
   return (
     <div style={s.summCard}>
       <div style={s.summTitle}>Summary</div>
@@ -1190,12 +1198,18 @@ function Summary({ stumps }) {
         );
       })}
       <div style={s.divider}/>
+      {disc > 0 && (
+        <div style={{ ...s.summRow, fontSize:12, color:"#00ff88", fontStyle:"italic" }}>
+          <span>Volume discount ({Math.round(disc*100)}% · {stumps.length} stumps)</span>
+          <span>−{fmt(preDisc * disc)}</span>
+        </div>
+      )}
       {total > sum && (
         <div style={{ ...s.summRow, fontSize:12, color:MUTED, fontStyle:"italic" }}>
           <span>Job minimum applied</span><span>{fmt(MIN_PER_JOB)}</span>
         </div>
       )}
-      <div style={s.totalRow}><span>Total</span><span>{fmt(total)}</span></div>
+      <div style={s.totalRow}><span>Total</span><span>{fmt(rounded)}</span></div>
     </div>
   );
 }

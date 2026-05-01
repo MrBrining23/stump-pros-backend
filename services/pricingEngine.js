@@ -147,13 +147,28 @@ function calculateJob(stumps, config) {
     };
   });
 
-  const stump_subtotal = Math.round(priced.reduce((sum, s) => sum + s.subtotal, 0) * 100) / 100;
+  // Volume discount based on stump count
+  const count = priced.length;
+  const volume_discount =
+    count >= 21 ? 0.25 :
+    count >= 11 ? 0.20 :
+    count >= 5  ? 0.15 : 0;
+
+  // Apply discount to each stump's subtotal
+  const discounted = priced.map(s => ({
+    ...s,
+    subtotal: volume_discount > 0
+      ? Math.round(s.subtotal * (1 - volume_discount) * 100) / 100
+      : s.subtotal,
+  }));
+
+  const stump_subtotal = Math.round(discounted.reduce((sum, s) => sum + s.subtotal, 0) * 100) / 100;
   const job_minimum_applied = stump_subtotal < minPerJob;
   // Round job_total UP to the nearest $25 interval (stump_subtotal stays unrounded for display)
   const raw_total = job_minimum_applied ? minPerJob : stump_subtotal;
   const job_total = Math.ceil(raw_total / 25) * 25;
 
-  return { stumps: priced, stump_subtotal, job_total, job_minimum_applied };
+  return { stumps: discounted, stump_subtotal, job_total, job_minimum_applied, volume_discount };
 }
 
 /**

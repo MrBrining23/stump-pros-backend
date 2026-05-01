@@ -48,7 +48,7 @@ async function getEstimateWithItems(id) {
     `SELECT * FROM estimate_stump_items WHERE estimate_id = $1 ORDER BY stump_number`, [id]
   );
   const { rows: photos } = await pool.query(
-    `SELECT * FROM estimate_photos WHERE estimate_id = $1 ORDER BY display_order, created_at`, [id]
+    `SELECT * FROM estimate_photos WHERE estimate_id = $1 ORDER BY stump_number NULLS LAST, display_order, created_at`, [id]
   );
 
   return { ...est, stump_items: stumps, photos };
@@ -101,10 +101,10 @@ async function processApproval(estimateId, approvedBy, signatureData = null) {
     // Invoice line items (one per stump)
     for (const stump of est.stump_items) {
       const mods = [
-        stump.difficulty !== 'normal' ? LABELS.difficulty[stump.difficulty] : null,
-        stump.access !== 'open'       ? LABELS.access[stump.access]         : null,
-        stump.depth !== 'standard'    ? LABELS.depth[stump.depth]           : null,
-        stump.cleanup !== 'none'      ? LABELS.cleanup[stump.cleanup]       : null,
+        stump.difficulty !== 'normal'                        ? LABELS.difficulty[stump.difficulty] : null,
+        stump.access !== 'open'                              ? LABELS.access[stump.access]         : null,
+        (stump.height && stump.height !== 'flush')           ? LABELS.height[stump.height]         : null,
+        stump.cleanup !== 'none'                             ? LABELS.cleanup[stump.cleanup]       : null,
       ].filter(Boolean);
 
       const desc = `Stump Grinding — ${stump.diameter_inches}" diameter` +
@@ -188,11 +188,13 @@ router.post('/', async (req, res) => {
     for (const s of priced.stumps) {
       await client.query(
         `INSERT INTO estimate_stump_items (estimate_id, stump_number, diameter_inches,
-           difficulty, access, depth, cleanup, notes, base_price, subtotal)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+           difficulty, access, depth, cleanup, notes, base_price, subtotal,
+           height, roots, rocky, extra_deep)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [estimate.id, s.stump_number, s.diameter_inches,
          s.difficulty||'normal', s.access||'open', s.depth||'standard',
-         s.cleanup||'none', s.notes||null, s.base_price, s.subtotal]
+         s.cleanup||'none', s.notes||null, s.base_price, s.subtotal,
+         s.height||'flush', s.roots||'none', !!s.rocky, !!s.extra_deep]
       );
     }
 
@@ -210,8 +212,8 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Create estimate error:', err);
-    res.status(500).json({ error: 'Failed to create estimate' });
+    console.error('Create estimate error:', err.message, err.detail || '');
+    res.status(500).json({ error: 'Failed to create estimate', detail: err.message });
   } finally {
     client.release();
   }
@@ -315,6 +317,8 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
       ? req.body.caption
       : [req.body.caption || ''];
 
+    const stumpNum = req.query.stump_number ? parseInt(req.query.stump_number) : null;
+
     const saved = [];
     for (let i = 0; i < req.files.length; i++) {
       const file    = req.files[i];
@@ -328,9 +332,9 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
 
       const { rows } = await pool.query(
         `INSERT INTO estimate_photos
-           (estimate_id, cloudinary_url, cloudinary_public_id, caption, display_order)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [req.params.id, url, public_id, caption, i]
+           (estimate_id, cloudinary_url, cloudinary_public_id, caption, display_order, stump_number)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [req.params.id, url, public_id, caption, i, stumpNum]
       );
       saved.push(rows[0]);
     }
@@ -425,7 +429,7 @@ router.get('/e/:token', async (req, res) => {
     if (!rows.length) return res.status(404).send('<h2 style="font-family:sans-serif;padding:40px">Estimate not found. Please call <a href="tel:3047122005">304-712-2005</a>.</h2>');
 
     const { rows: photos } = await pool.query(
-      `SELECT * FROM estimate_photos WHERE estimate_id = $1 ORDER BY display_order, created_at`,
+      `SELECT * FROM estimate_photos WHERE estimate_id = $1 ORDER BY stump_number NULLS LAST, display_order, created_at`,
       [rows[0].id]
     );
 
@@ -497,32 +501,52 @@ function buildApprovalPage(est, photos, token) {
   const isRejected = est.status === 'rejected';
   const isExpired  = est.valid_until && new Date(est.valid_until) < new Date();
 
+  // Build photo map: stump_number (or null→'general') → photos array
+  const photosByStump = {};
+  photos.forEach(p => {
+    const key = p.stump_number != null ? p.stump_number : 'general';
+    if (!photosByStump[key]) photosByStump[key] = [];
+    photosByStump[key].push(p);
+  });
+
   const stumpRows = (est.stump_items || []).map((s, i) => {
+    const stumpNum = s.stump_number || (i + 1);
     const mods = [
-      s.difficulty !== 'normal' ? LABELS.difficulty[s.difficulty] : null,
-      s.access !== 'open'       ? LABELS.access[s.access]         : null,
-      s.depth !== 'standard'    ? LABELS.depth[s.depth]           : null,
-      s.cleanup !== 'none'      ? LABELS.cleanup[s.cleanup]       : null,
+      s.difficulty !== 'normal'                        ? LABELS.difficulty[s.difficulty] : null,
+      s.access !== 'open'                              ? LABELS.access[s.access]         : null,
+      (s.height && s.height !== 'flush')               ? LABELS.height[s.height]         : null,
+      s.cleanup !== 'none'                             ? LABELS.cleanup[s.cleanup]       : null,
     ].filter(Boolean);
+    const stumpPhotos = photosByStump[stumpNum] || [];
+    const photosHtml = stumpPhotos.length ? `
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px 34px">
+        ${stumpPhotos.map(p => `<img src="${thumbnailUrl(p.cloudinary_url, 300)}" alt="${p.caption || 'Stump photo'}" loading="lazy"
+          onclick="openPhoto('${p.cloudinary_url}')"
+          style="width:80px;height:80px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid #ddd"/>`).join('')}
+      </div>` : '';
     return `
-      <div class="stump-row">
-        <div class="stump-info">
-          <span class="num">#${i + 1}</span>
-          <div>
-            <div>${s.diameter_inches}" diameter stump</div>
-            ${mods.length ? `<div class="mods">${mods.join(' · ')}</div>` : ''}
+      <div class="stump-row" style="flex-direction:column;align-items:stretch">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="stump-info">
+            <span class="num">#${stumpNum}</span>
+            <div>
+              <div>${s.diameter_inches}" diameter stump</div>
+              ${mods.length ? `<div class="mods">${mods.join(' · ')}</div>` : ''}
+            </div>
           </div>
+          <span class="price">${formatDollars(s.subtotal)}</span>
         </div>
-        <span class="price">${formatDollars(s.subtotal)}</span>
+        ${photosHtml}
       </div>`;
   }).join('');
 
-  // Photo grid — shown above the breakdown
-  const photoGrid = photos.length ? `
+  // General photos (no stump number) shown above breakdown
+  const generalPhotos = photosByStump['general'] || [];
+  const photoGrid = generalPhotos.length ? `
     <div class="section">
       <div class="section-title">Job Photos</div>
       <div class="photo-grid">
-        ${photos.map(p => `
+        ${generalPhotos.map(p => `
           <div class="photo-item">
             <img src="${thumbnailUrl(p.cloudinary_url, 600)}" alt="${p.caption || 'Job photo'}" loading="lazy" onclick="openPhoto('${p.cloudinary_url}')"/>
             ${p.caption ? `<div class="photo-caption">${p.caption}</div>` : ''}
