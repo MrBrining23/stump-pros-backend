@@ -882,23 +882,93 @@ const DEPTH_OPTS = [
   { value: "standard",   label: "Standard",  mult: 1.00 },
   { value: "extra_deep", label: "Extra Deep",mult: 1.25 },
 ];
+const HEIGHT_OPTS = [
+  { value: "flush", label: 'Flush–6"',  mult: 1.00 },
+  { value: "mid",   label: '7–15"',     mult: 1.25 },
+  { value: "tall",  label: '16"+',      mult: 1.50 },
+];
 const CLEANUP_OPTS = [
   { value: "none",         label: "None",              mult: 1.00 },
   { value: "chips_only",   label: "Chips",             mult: 1.50 },
   { value: "full_cleanup", label: "Full Restoration",  mult: 2.00 },
 ];
+const ROOTS_OPTS = [
+  { value: "none",       label: "None / Minimal",        mult: 1.00 },
+  { value: "surface",    label: "Mound / Surface Roots",  mult: 1.25 },
+  { value: "full_yard",  label: "Whole Area / Yard",      mult: 1.60 },
+];
 
 const CAPTION_SUGGESTIONS = ["Before", "After", "Stump 1", "Stump 2", "Access", "Roots"];
+
+// ── Customer Picker Modal ─────────────────────────────────────────────────
+function CustomerPickerModal({ onSelect, onClose }) {
+  const [leads, setLeads] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/leads`)
+      .then(r => r.json())
+      .then(data => { setLeads(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const filtered = leads.filter(l =>
+    !search ||
+    (l.name  && l.name.toLowerCase().includes(search.toLowerCase())) ||
+    (l.phone && l.phone.includes(search))
+  );
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:200, display:"flex", alignItems:"flex-end" }}>
+      <div style={{ background:"#1a1a2e", borderRadius:"16px 16px 0 0", width:"100%", maxWidth:520, margin:"0 auto", maxHeight:"80vh", display:"flex", flexDirection:"column", paddingBottom:"env(safe-area-inset-bottom)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"18px 20px 12px", borderBottom:"1px solid #2a2a3e" }}>
+          <span style={{ fontWeight:800, fontSize:17, color:"#f0ece4" }}>Load Customer</span>
+          <button type="button" onClick={onClose} style={{ background:"none", border:"none", color:"#777", fontSize:20, cursor:"pointer" }}>✕</button>
+        </div>
+        <div style={{ padding:"12px 16px" }}>
+          <input
+            autoFocus
+            placeholder="Search by name or phone…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width:"100%", background:"#0d0d1a", border:"1px solid #333", borderRadius:8, color:"#f0ece4", fontSize:15, padding:"10px 14px", boxSizing:"border-box", fontFamily:"inherit", outline:"none" }}
+          />
+        </div>
+        <div style={{ overflowY:"auto", flex:1 }}>
+          {loading && <div style={{ textAlign:"center", color:"#777", padding:24 }}>Loading…</div>}
+          {!loading && filtered.length === 0 && <div style={{ textAlign:"center", color:"#777", padding:24 }}>No leads found</div>}
+          {filtered.map(l => (
+            <div key={l.id}
+              onMouseDown={() => onSelect(l)}
+              style={{ padding:"12px 20px", borderBottom:"1px solid #2a2a3e", cursor:"pointer" }}
+              onMouseEnter={e => e.currentTarget.style.background="#1e2040"}
+              onMouseLeave={e => e.currentTarget.style.background="transparent"}
+            >
+              <div style={{ fontWeight:700, fontSize:14, color:"#f0ece4" }}>{l.name}</div>
+              <div style={{ fontSize:12, color:"#888", marginTop:2 }}>{[l.phone, l.address].filter(Boolean).join(" · ")}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function calcStump(s) {
   const d = parseFloat(s.diameter);
   if (!d || d <= 0) return 0;
-  const base  = d * PRICE_PER_INCH;
-  const diff  = DIFFICULTY_OPTS.find(o => o.value === s.difficulty)?.mult ?? 1;
-  const acc   = ACCESS_OPTS.find(o => o.value === s.access)?.mult         ?? 1;
-  const dep   = DEPTH_OPTS.find(o => o.value === s.depth)?.mult           ?? 1;
-  const clean = CLEANUP_OPTS.find(o => o.value === s.cleanup)?.mult       ?? 1;
-  return Math.max(base * diff * acc * dep * clean, MIN_PER_STUMP);
+  const rate      = d > 40 ? 7.00 : PRICE_PER_INCH;
+  const base      = d * rate;
+  const diff      = DIFFICULTY_OPTS.find(o => o.value === s.difficulty)?.mult        ?? 1;
+  const acc       = ACCESS_OPTS.find(o => o.value === s.access)?.mult                ?? 1;
+  const hgt       = HEIGHT_OPTS.find(o => o.value === (s.height||"flush"))?.mult     ?? 1;
+  const clean     = CLEANUP_OPTS.find(o => o.value === s.cleanup)?.mult              ?? 1;
+  const roots     = ROOTS_OPTS.find(o => o.value === s.roots)?.mult                  ?? 1;
+  const rocky     = s.rocky      ? 1.20 : 1.0;
+  const extraDeep = s.extra_deep ? 1.25 : 1.0;
+  return Math.max(base * diff * acc * hgt * clean * roots * rocky * extraDeep, MIN_PER_STUMP);
 }
 function calcJob(stumps) {
   return Math.max(stumps.reduce((a, s) => a + calcStump(s), 0), MIN_PER_JOB);
@@ -908,7 +978,8 @@ function fmt(n) {
 }
 function newStump(i) {
   return { id: Date.now() + i, diameter: "", difficulty: "normal",
-           access: "open", depth: "standard", cleanup: "none", notes: "" };
+           access: "open", height: "flush", cleanup: "none", roots: "none",
+           rocky: false, extra_deep: false, notes: "" };
 }
 
 // ── Segment selector ─────────────────────────────────────────────────────
@@ -929,7 +1000,7 @@ function Segs({ label, value, onChange, options }) {
 }
 
 // ── Stump card ───────────────────────────────────────────────────────────
-function StumpCard({ stump, index, onChange, onRemove, canRemove }) {
+function StumpCard({ stump, index, onChange, onRemove, canRemove, photos, onPhotosChange }) {
   const sub    = calcStump(stump);
   const hasMin = stump.diameter && parseFloat(stump.diameter) > 0 && sub === MIN_PER_STUMP;
   return (
@@ -953,16 +1024,50 @@ function StumpCard({ stump, index, onChange, onRemove, canRemove }) {
             style={s.diamIn} />
           <span style={{ color:MUTED, fontSize:13 }}>inches</span>
           {stump.diameter > 0 && (
-            <span style={s.baseHint}>${(parseFloat(stump.diameter)*5).toFixed(0)} base</span>
+            <span style={s.baseHint}>${(parseFloat(stump.diameter) * (parseFloat(stump.diameter) > 40 ? 7 : 5)).toFixed(0)} base</span>
           )}
         </div>
       </div>
       <Segs label="Wood"    value={stump.difficulty} onChange={v=>onChange("difficulty",v)} options={DIFFICULTY_OPTS} />
       <Segs label="Access"  value={stump.access}     onChange={v=>onChange("access",v)}     options={ACCESS_OPTS} />
-      <Segs label="Depth"   value={stump.depth}      onChange={v=>onChange("depth",v)}      options={DEPTH_OPTS} />
+      <Segs label="Height"  value={stump.height||"flush"} onChange={v=>onChange("height",v)} options={HEIGHT_OPTS} />
       <Segs label="Cleanup" value={stump.cleanup}    onChange={v=>onChange("cleanup",v)}    options={CLEANUP_OPTS} />
+      <Segs label="Roots"   value={stump.roots||"none"} onChange={v=>onChange("roots",v)}  options={ROOTS_OPTS} />
+
+      {/* Rocky Soil checkbox */}
+      <label style={{ display:"flex", alignItems:"center", gap:8, margin:"10px 0 6px", cursor:"pointer" }}>
+        <input type="checkbox" checked={!!stump.rocky} onChange={e => onChange("rocky", e.target.checked)}
+          style={{ width:18, height:18, accentColor:"#00ff88" }} />
+        <span style={{ fontSize:13, color:"#ccc" }}>🪨 Rocky Soil <span style={{ color:"#00ff88", fontSize:11 }}>+20%</span></span>
+      </label>
+
+      {/* Extra Deep Grinding checkbox */}
+      <label style={{ display:"flex", alignItems:"center", gap:8, margin:"6px 0 10px", cursor:"pointer" }}>
+        <input type="checkbox" checked={!!stump.extra_deep} onChange={e => onChange("extra_deep", e.target.checked)}
+          style={{ width:18, height:18, accentColor:"#00ff88" }} />
+        <span style={{ fontSize:13, color:"#ccc" }}>⛏️ Extra Deep Grinding <span style={{ color:"#00ff88", fontSize:11 }}>+25%</span></span>
+      </label>
+
       <input type="text" placeholder="Notes (optional)" value={stump.notes}
         onChange={e => onChange("notes", e.target.value)} style={s.notesIn} />
+
+      {/* Inline photo picker */}
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:6 }}>
+          {(photos||[]).map((f,i) => (
+            <div key={i} style={{ position:"relative" }}>
+              <img src={URL.createObjectURL(f)} style={{ width:64, height:64, objectFit:"cover", borderRadius:6, border:"1px solid #333" }} />
+              <button type="button" onClick={() => onPhotosChange((photos||[]).filter((_,j)=>j!==i))}
+                style={{ position:"absolute", top:-6, right:-6, background:"#ff4444", color:"#fff", border:"none", borderRadius:"50%", width:18, height:18, fontSize:11, cursor:"pointer", lineHeight:"18px", textAlign:"center", padding:0 }}>✕</button>
+            </div>
+          ))}
+        </div>
+        <label style={{ cursor:"pointer", display:"inline-flex", alignItems:"center", gap:6, padding:"5px 12px", border:"1px dashed #555", borderRadius:6, fontSize:12, color:"#888" }}>
+          📷 Add Photo
+          <input type="file" accept="image/*" multiple capture="environment" style={{ display:"none" }}
+            onChange={e => onPhotosChange([...(photos||[]), ...Array.from(e.target.files)])} />
+        </label>
+      </div>
     </div>
   );
 }
@@ -980,7 +1085,7 @@ function Summary({ stumps }) {
         const tags = [
           st.difficulty !== "normal"  ? DIFFICULTY_OPTS.find(o=>o.value===st.difficulty)?.label : null,
           st.access !== "open"        ? ACCESS_OPTS.find(o=>o.value===st.access)?.label         : null,
-          st.depth !== "standard"     ? DEPTH_OPTS.find(o=>o.value===st.depth)?.label           : null,
+          (st.height||"flush") !== "flush" ? HEIGHT_OPTS.find(o=>o.value===(st.height||"flush"))?.label : null,
           st.cleanup !== "none"       ? CLEANUP_OPTS.find(o=>o.value===st.cleanup)?.label       : null,
         ].filter(Boolean);
         return (
@@ -1219,21 +1324,23 @@ function SuccessScreen({ mode, customerName, invoiceNumber, onDone }) {
 
 // ── MAIN ─────────────────────────────────────────────────────────────────
 function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
-  const [phase,      setPhase]      = useState("build");
-  const [stumps,     setStumps]     = useState([newStump(0)]);
-  const [customer,   setCustomer]   = useState({
+  const [phase,        setPhase]        = useState("build");
+  const [stumps,       setStumps]       = useState([newStump(0)]);
+  const [customer,     setCustomer]     = useState({
     name: lead?.name||"", phone: lead?.phone||"",
     email: lead?.email||"", address: lead?.address||"",
   });
-  const [notes,      setNotes]      = useState("");
-  const [saving,     setSaving]     = useState(false);
-  const [sending,    setSending]    = useState(false);
-  const [error,      setError]      = useState(null);
-  const [estimate,   setEstimate]   = useState(null);
-  const [photos,     setPhotos]     = useState([]);
-  const [result,     setResult]     = useState(null);
-  const [mode,       setMode]       = useState(null);
-  const [showOnsite, setShowOnsite] = useState(false);
+  const [notes,        setNotes]        = useState("");
+  const [saving,       setSaving]       = useState(false);
+  const [sending,      setSending]      = useState(false);
+  const [error,        setError]        = useState(null);
+  const [estimate,     setEstimate]     = useState(null);
+  const [photos,       setPhotos]       = useState([]);
+  const [stumpPhotos,  setStumpPhotos]  = useState({});
+  const [result,       setResult]       = useState(null);
+  const [mode,         setMode]         = useState(null);
+  const [showOnsite,   setShowOnsite]   = useState(false);
+  const [showPicker,   setShowPicker]   = useState(false);
 
   const addStump    = () => setStumps(p => [...p, newStump(p.length)]);
   const removeStump = id  => setStumps(p => p.filter(s => s.id !== id));
@@ -1256,7 +1363,9 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
           stumps: stumps.map(s => ({
             diameter_inches: parseFloat(s.diameter),
             difficulty: s.difficulty, access: s.access,
-            depth: s.depth, cleanup: s.cleanup, notes: s.notes||null,
+            height: s.height||"flush", cleanup: s.cleanup, roots: s.roots||"none",
+            rocky: !!s.rocky, extra_deep: !!s.extra_deep,
+            notes: s.notes||null,
           })),
         }),
       });
@@ -1264,6 +1373,20 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
       if (!res.ok) throw new Error(data.error || "Save failed");
       setEstimate(data);
       setPhotos(data.photos || []);
+
+      // Upload stump photos collected during the build phase
+      const estimateId = data.id;
+      const uploadPromises = stumps.map((stump, idx) => {
+        const files = stumpPhotos[stump.id] || [];
+        if (!files.length) return Promise.resolve();
+        const formData = new FormData();
+        files.forEach(f => formData.append("photos", f));
+        return fetch(`${apiBase}/estimates/${estimateId}/photos?stump_number=${idx + 1}`, {
+          method: "POST", body: formData,
+        });
+      });
+      await Promise.all(uploadPromises);
+
       setPhase("saved");
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
@@ -1307,7 +1430,13 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
         {/* ══ BUILD ══════════════════════════════════════════════════════ */}
         {phase === "build" && (<>
           <section style={s.sec}>
-            <h2 style={s.secHead}>Customer</h2>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+              <h2 style={{ ...s.secHead, margin:0 }}>Customer</h2>
+              <button type="button" onClick={() => setShowPicker(true)}
+                style={{ background:"transparent", border:`1px solid ${GOLD}`, borderRadius:6, color:GOLD, fontSize:12, fontWeight:700, padding:"5px 12px", cursor:"pointer", fontFamily:"inherit" }}>
+                📋 Load Customer
+              </button>
+            </div>
             {[{k:"name",ph:"Full Name *",t:"text"},{k:"phone",ph:"Phone *",t:"tel"},
               {k:"email",ph:"Email (optional)",t:"email"},{k:"address",ph:"Service Address",t:"text"}]
               .map(f => (
@@ -1324,7 +1453,9 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
               <StumpCard key={st.id} stump={st} index={i}
                 onChange={(f,v)=>updateStump(st.id,f,v)}
                 onRemove={()=>removeStump(st.id)}
-                canRemove={stumps.length>1}/>
+                canRemove={stumps.length>1}
+                photos={stumpPhotos[st.id] || []}
+                onPhotosChange={files => setStumpPhotos(p => ({ ...p, [st.id]: files }))}/>
             ))}
             <button type="button" onClick={addStump} style={s.addBtn}>+ Add Stump</button>
           </section>
@@ -1418,7 +1549,24 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
 
           {error && <div style={s.errBox}>{error}</div>}
         </>)}
+
+
       </div>
+
+      {showPicker && (
+        <CustomerPickerModal
+          onSelect={lead => {
+            setCustomer({
+              name:    lead.name    || "",
+              phone:   lead.phone   || "",
+              email:   lead.email   || "",
+              address: lead.address || "",
+            });
+            setShowPicker(false);
+          }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
 
       {showOnsite && (
         <OnsiteModal estimate={estimate} apiBase={apiBase}

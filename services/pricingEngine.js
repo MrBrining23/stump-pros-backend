@@ -9,27 +9,33 @@
  *   min_charge_per_job     — minimum total job charge ($225.00)
  *   difficulty_multipliers — JSON object of difficulty → multiplier
  *   access_multipliers     — JSON object of access → multiplier
- *   depth_multipliers      — JSON object of depth → multiplier
+ *   height_multipliers     — JSON object of height → multiplier
  *   cleanup_multipliers    — JSON object of cleanup → multiplier
  */
 
 const pool = require('../db/pool');
 
 const DEFAULTS = {
-  price_per_inch:         5.00,
-  min_charge_per_stump:   50.00,
-  min_charge_per_job:     225.00,
+  price_per_inch:               5.00,
+  large_stump_price_per_inch:   7.00,
+  min_charge_per_stump:         50.00,
+  min_charge_per_job:           225.00,
   difficulty_multipliers: { normal: 1.0, hard: 1.25, very_dense: 1.5 },
   access_multipliers:     { open: 1.0, limited: 1.25, very_limited: 1.5 },
-  depth_multipliers:      { standard: 1.0, extra_deep: 1.25 },
+  height_multipliers:     { flush: 1.0, mid: 1.25, tall: 1.5 },
   cleanup_multipliers:    { none: 1.0, chips_only: 1.5, full_cleanup: 2.0 },
+  roots_multipliers:      { none: 1.0, surface: 1.25, full_yard: 1.6 },
+  rocky:                  false,
+  extra_deep:             false,
 };
 
 const LABELS = {
   difficulty: { normal: 'Normal', hard: 'Hard Wood', very_dense: 'Very Dense' },
   access:     { open: 'Open Access', limited: 'Limited Access', very_limited: 'Very Limited Access' },
-  depth:      { standard: 'Standard Depth', extra_deep: 'Extra Deep' },
+  height:     { flush: 'Flush to 6"', mid: '7–15"', tall: '16"+"' },
   cleanup:    { none: 'Chips Left', chips_only: 'Chips Removed', full_cleanup: 'Full Cleanup' },
+  roots:      { none: 'None / Minimal', surface: 'Mound / Surface Roots', full_yard: 'Whole Area / Yard' },
+  rocky:      'Rocky Soil',
 };
 
 /**
@@ -39,8 +45,9 @@ const LABELS = {
 async function loadPricingConfig() {
   try {
     const keys = [
-      'price_per_inch', 'min_charge_per_stump', 'min_charge_per_job',
-      'difficulty_multipliers', 'access_multipliers', 'depth_multipliers', 'cleanup_multipliers',
+      'price_per_inch', 'large_stump_price_per_inch', 'min_charge_per_stump', 'min_charge_per_job',
+      'difficulty_multipliers', 'access_multipliers', 'height_multipliers', 'cleanup_multipliers',
+      'roots_multipliers',
     ];
     const { rows } = await pool.query(
       `SELECT key, value FROM pricing_config WHERE key = ANY($1)`,
@@ -70,7 +77,7 @@ async function loadPricingConfig() {
  *   diameter_inches: number,
  *   difficulty?: string,
  *   access?: string,
- *   depth?: string,
+ *   height?: string,
  *   cleanup?: string,
  *   notes?: string
  * }>} stumps
@@ -85,32 +92,42 @@ async function loadPricingConfig() {
  */
 function calculateJob(stumps, config) {
   const {
-    price_per_inch:         pricePerInch,
-    min_charge_per_stump:   minPerStump,
-    min_charge_per_job:     minPerJob,
+    price_per_inch:               pricePerInch,
+    large_stump_price_per_inch:   largePricePerInch,
+    min_charge_per_stump:         minPerStump,
+    min_charge_per_job:           minPerJob,
     difficulty_multipliers: diffMult,
     access_multipliers:     accessMult,
-    depth_multipliers:      depthMult,
+    height_multipliers:     heightMult,
     cleanup_multipliers:    cleanupMult,
+    roots_multipliers:      rootsMult,
   } = config;
 
   const priced = stumps.map((s, i) => {
     const diameter = parseFloat(s.diameter_inches) || 0;
     const diff     = s.difficulty || 'normal';
     const access   = s.access     || 'open';
-    const depth    = s.depth      || 'standard';
+    const height   = s.height     || 'flush';
     const cleanup  = s.cleanup    || 'none';
+    const roots    = s.roots      || 'none';
 
+    const ratePerInch = diameter > 40 ? largePricePerInch : pricePerInch;
     const base_price = Math.max(
-      diameter * pricePerInch,
+      diameter * ratePerInch,
       minPerStump
     );
 
+    const rockyMult = s.rocky      ? 1.20 : 1.0;
+    const deepMult  = s.extra_deep ? 1.25 : 1.0;
+
     const multiplier =
-      (diffMult[diff]     || 1.0) *
-      (accessMult[access] || 1.0) *
-      (depthMult[depth]   || 1.0) *
-      (cleanupMult[cleanup] || 1.0);
+      (diffMult[diff]        || 1.0) *
+      (accessMult[access]    || 1.0) *
+      (heightMult[height]    || 1.0) *
+      (cleanupMult[cleanup]  || 1.0) *
+      (rootsMult[roots]      || 1.0) *
+      rockyMult *
+      deepMult;
 
     const subtotal = Math.round(base_price * multiplier * 100) / 100;
 
@@ -120,8 +137,11 @@ function calculateJob(stumps, config) {
       diameter_inches: diameter,
       difficulty:      diff,
       access:          access,
-      depth:           depth,
+      height:          height,
       cleanup:         cleanup,
+      roots:           roots,
+      rocky:           s.rocky      || false,
+      extra_deep:      s.extra_deep || false,
       base_price:      Math.round(base_price * 100) / 100,
       subtotal,
     };

@@ -241,8 +241,17 @@ INSERT INTO pricing_config (key, value, description) VALUES
   ('difficulty_multipliers', '{"normal":1.0,"hard":1.25,"very_dense":1.5}',  'Multipliers by wood hardness'),
   ('access_multipliers',     '{"open":1.0,"limited":1.25,"very_limited":1.5}','Multipliers by site access'),
   ('depth_multipliers',      '{"standard":1.0,"extra_deep":1.25}',           'Multipliers by grinding depth'),
-  ('cleanup_multipliers',    '{"none":1.0,"chips_only":1.5,"full_cleanup":2.0}','Multipliers by cleanup level')
+  ('cleanup_multipliers',    '{"none":1.0,"chips_only":1.5,"full_cleanup":2.0}','Multipliers by cleanup level'),
+  ('large_stump_price_per_inch', '7.00', 'Price per inch for stumps over 40" diameter ($)'),
+  ('roots_multipliers',   '{"none":1.0,"surface":1.25,"full_yard":1.6}',   'Multipliers by root complexity'),
+  ('height_multipliers',  '{"flush":1.0,"mid":1.25,"tall":1.5}',          'Multipliers by stump height')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value WHERE pricing_config.value = '';
+
+ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS roots      TEXT    NOT NULL DEFAULT 'none';
+ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS height     TEXT    NOT NULL DEFAULT 'flush';
+ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS rocky      BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS extra_deep BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE estimate_photos      ADD COLUMN IF NOT EXISTS stump_number INTEGER;
 
 -- ============================================================
 -- INDEXES
