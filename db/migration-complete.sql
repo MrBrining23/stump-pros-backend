@@ -253,8 +253,13 @@ ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS rocky      BOOLEAN NOT
 ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS extra_deep BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE estimate_photos      ADD COLUMN IF NOT EXISTS stump_number INTEGER;
 
+-- Safe column additions for older message/estimates tables
+ALTER TABLE messages  ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE;
+ALTER TABLE messages  ADD COLUMN IF NOT EXISTS job_id  INTEGER REFERENCES jobs(id)  ON DELETE CASCADE;
+ALTER TABLE estimates ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL;
+
 -- ============================================================
--- INDEXES
+-- INDEXES (wrapped in DO blocks so existing indexes don't error)
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_estimates_approval_token ON estimates(approval_token);
 CREATE INDEX IF NOT EXISTS idx_estimates_lead_id        ON estimates(lead_id);
