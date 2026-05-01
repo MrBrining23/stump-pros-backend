@@ -264,3 +264,16 @@ CREATE INDEX IF NOT EXISTS idx_jobs_queue               ON jobs(queue_position) 
 CREATE INDEX IF NOT EXISTS idx_leads_phone              ON leads(phone);
 CREATE INDEX IF NOT EXISTS idx_messages_lead_id         ON messages(lead_id);
 CREATE INDEX IF NOT EXISTS idx_follow_up_queue_status   ON follow_up_queue(status, scheduled_at);
+
+-- ============================================================
+-- OAUTH TOKENS (QuickBooks / future providers)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  id            SERIAL PRIMARY KEY,
+  provider      TEXT UNIQUE NOT NULL,
+  access_token  TEXT,
+  refresh_token TEXT,
+  realm_id      TEXT,
+  expires_at    TIMESTAMPTZ,
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
+);

@@ -407,9 +407,98 @@ function LeadDetail({ lead, onBack, onConvert, onUpdateStatus }) {
 }
 
 // ============================================================
+// JOB PAYMENT ACTIONS  (QuickBooks invoice link / cash / check)
+// ============================================================
+function JobPaymentActions({ job, onRefresh }) {
+  const [loading, setLoading] = useState(null);
+  const [done, setDone]       = useState(null);
+
+  async function requestPayment() {
+    setLoading('link');
+    try {
+      const res = await fetch(`${API_BASE}/quickbooks/jobs/${job.id}/request-payment`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setDone(job.phone ? `Payment link sent to ${job.phone}` : 'Invoice created in QuickBooks');
+      onRefresh && onRefresh();
+    } catch (e) { alert(e.message); }
+    finally { setLoading(null); }
+  }
+
+  async function markPaid(method) {
+    const sendReceipt = job.phone ? confirm(`Send SMS receipt to ${job.phone}?`) : false;
+    setLoading(method);
+    try {
+      const res = await fetch(`${API_BASE}/quickbooks/jobs/${job.id}/mark-paid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_method: method, send_receipt: sendReceipt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setDone('Marked paid in QuickBooks ✓');
+      onRefresh && onRefresh();
+    } catch (e) { alert(e.message); }
+    finally { setLoading(null); }
+  }
+
+  if (done) {
+    return (
+      <div style={{ color: COLORS.green, fontSize: 13, padding: '8px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span>✓</span><span>{done}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+      <div style={{ fontSize: 11, color: COLORS.textDim, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Payment</div>
+      <button
+        onClick={requestPayment}
+        disabled={!!loading}
+        style={{
+          padding: '11px 16px', borderRadius: 8, border: 'none',
+          background: COLORS.green, color: '#fff',
+          fontWeight: 700, fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer',
+          opacity: loading ? 0.7 : 1,
+        }}
+      >
+        {loading === 'link' ? 'Sending…' : '💳 Send Payment Link'}
+      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => markPaid('cash')}
+          disabled={!!loading}
+          style={{
+            flex: 1, padding: '9px 8px', borderRadius: 8,
+            border: `1px solid ${COLORS.borderLight}`, background: 'transparent',
+            color: COLORS.text, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.7 : 1,
+          }}
+        >
+          {loading === 'cash' ? '…' : '💵 Cash'}
+        </button>
+        <button
+          onClick={() => markPaid('check')}
+          disabled={!!loading}
+          style={{
+            flex: 1, padding: '9px 8px', borderRadius: 8,
+            border: `1px solid ${COLORS.borderLight}`, background: 'transparent',
+            color: COLORS.text, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.7 : 1,
+          }}
+        >
+          {loading === 'check' ? '…' : '📝 Check'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // JOB DETAIL VIEW
 // ============================================================
-function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate }) {
+function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate, onRefresh }) {
   const [status, setStatus] = useState(job.status);
   const statuses = ["estimate", "scheduled", "in_progress", "completed", "invoiced", "paid"];
 
@@ -522,6 +611,8 @@ function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate }) {
       }}>
         📋 Send Estimate
       </button>
+
+      <JobPaymentActions job={job} onRefresh={onRefresh} />
     </div>
   );
 }
@@ -2497,6 +2588,7 @@ function StumpProsApp() {
             onBack={() => navigate("jobs")}
             onUpdateStatus={updateJobStatus}
             onSendEstimate={(job) => navigate("new-estimate", job)}
+            onRefresh={loadData}
           />
         ) : null;
       case "billing":
