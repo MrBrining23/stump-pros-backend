@@ -72,14 +72,30 @@ async function runMigration() {
        id SERIAL PRIMARY KEY, provider TEXT UNIQUE NOT NULL,
        access_token TEXT, refresh_token TEXT, realm_id TEXT,
        expires_at TIMESTAMPTZ, updated_at TIMESTAMPTZ DEFAULT NOW())`,
+    // estimates — columns added over time
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS lead_id        INTEGER REFERENCES leads(id) ON DELETE SET NULL`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS customer_phone TEXT`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS customer_email TEXT`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS address        TEXT`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS stump_count    INTEGER`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS total_amount   NUMERIC(10,2)`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS valid_until    TIMESTAMPTZ`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS approval_token UUID DEFAULT gen_random_uuid()`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS sent_at        TIMESTAMPTZ`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS approved_at    TIMESTAMPTZ`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS rejected_at    TIMESTAMPTZ`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS rejection_reason TEXT`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS approved_by    TEXT`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS signature_data TEXT`,
+    // estimate_stump_items
     `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS roots      TEXT    NOT NULL DEFAULT 'none'`,
     `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS height     TEXT    NOT NULL DEFAULT 'flush'`,
     `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS rocky      BOOLEAN NOT NULL DEFAULT FALSE`,
     `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS extra_deep BOOLEAN NOT NULL DEFAULT FALSE`,
     `ALTER TABLE estimate_photos      ADD COLUMN IF NOT EXISTS stump_number INTEGER`,
-    `ALTER TABLE messages  ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE`,
-    `ALTER TABLE messages  ADD COLUMN IF NOT EXISTS job_id  INTEGER REFERENCES jobs(id)  ON DELETE CASCADE`,
-    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL`,
+    // messages
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE`,
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS job_id  INTEGER REFERENCES jobs(id)  ON DELETE CASCADE`,
   ];
 
   for (const sql of patches) {
