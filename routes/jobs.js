@@ -87,6 +87,17 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// DELETE /api/jobs/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM jobs WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/jobs/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/jobs/:id/invoice — manual QB invoice trigger
 router.post('/:id/invoice', async (req, res) => {
   const jobId = req.params.id;

@@ -150,6 +150,82 @@ router.post('/:id/convert', async (req, res) => {
   }
 });
 
+// PATCH /api/leads/:id — edit lead fields
+router.patch('/:id', async (req, res) => {
+  const { name, phone, email, address, source, contact_preference, stump_count, notes } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE leads SET
+        name               = COALESCE($1, name),
+        phone              = COALESCE($2, phone),
+        email              = COALESCE($3, email),
+        address            = COALESCE($4, address),
+        source             = COALESCE($5, source),
+        contact_preference = COALESCE($6, contact_preference),
+        stump_count        = COALESCE($7, stump_count),
+        notes              = COALESCE($8, notes)
+       WHERE id = $9 RETURNING *`,
+      [name, phone, email, address, source, contact_preference, stump_count || null, notes, req.params.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('PATCH /api/leads/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/leads/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM leads WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/leads/:id error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/leads/:id/convert-to-customer — create a customer record from this lead
+router.post('/:id/convert-to-customer', async (req, res) => {
+  const leadId = req.params.id;
+  try {
+    const leadResult = await pool.query('SELECT * FROM leads WHERE id = $1', [leadId]);
+    if (leadResult.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
+    const lead = leadResult.rows[0];
+
+    // Insert into customers (skip if already exists by name+phone)
+    const customerResult = await pool.query(
+      `INSERT INTO customers (name, phone, email, address, notes, source)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT DO NOTHING
+       RETURNING *`,
+      [lead.name, lead.phone, lead.email, lead.address, lead.notes, lead.source || 'lead']
+    );
+
+    // If ON CONFLICT fired, fetch the existing customer
+    let customer;
+    if (customerResult.rows.length > 0) {
+      customer = customerResult.rows[0];
+    } else {
+      const existing = await pool.query(
+        `SELECT * FROM customers WHERE lower(name) = lower($1) AND (phone = $2 OR ($2 IS NULL AND phone IS NULL)) LIMIT 1`,
+        [lead.name, lead.phone]
+      );
+      customer = existing.rows[0];
+    }
+
+    // Mark lead as converted and cancel follow-ups
+    await pool.query('UPDATE leads SET status = $1 WHERE id = $2', ['converted', leadId]);
+    try { await cancelFollowUps(leadId); } catch (_) {}
+
+    res.status(201).json({ customer });
+  } catch (err) {
+    console.error('POST /api/leads/:id/convert-to-customer error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/leads/:id/follow-ups
 router.get('/:id/follow-ups', async (req, res) => {
   try {

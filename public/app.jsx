@@ -304,12 +304,20 @@ function InvoiceCard({ invoice, onClick }) {
 // ============================================================
 // LEAD DETAIL VIEW
 // ============================================================
-function LeadDetail({ lead, onBack, onConvert, onUpdateStatus }) {
+function LeadDetail({ lead, onBack, onConvert, onConvertToCustomer, onUpdateStatus, onEdit, onDelete }) {
   const [status, setStatus] = useState(lead.status);
+  const [deleting, setDeleting] = useState(false);
 
   const handleStatusChange = (newStatus) => {
     setStatus(newStatus);
     onUpdateStatus(lead.id, newStatus);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete lead for ${lead.name}? This cannot be undone.`)) return;
+    setDeleting(true);
+    await fetch(`${API_BASE}/leads/${lead.id}`, { method: "DELETE" });
+    onDelete();
   };
 
   return (
@@ -329,7 +337,10 @@ function LeadDetail({ lead, onBack, onConvert, onUpdateStatus }) {
               {SOURCE_ICONS[lead.source]} {lead.source} · {PREF_ICONS[lead.contact_preference]} prefers {lead.contact_preference}
             </div>
           </div>
-          <StatusBadge status={status} />
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <StatusBadge status={status} />
+            <button onClick={onEdit} style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.textMuted, fontSize: "12px", padding: "6px 12px", cursor: "pointer" }}>Edit</button>
+          </div>
         </div>
       </div>
 
@@ -394,14 +405,30 @@ function LeadDetail({ lead, onBack, onConvert, onUpdateStatus }) {
       </div>
 
       {status !== "converted" && status !== "lost" && (
-        <button onClick={() => onConvert(lead)} style={{
-          width: "100%", padding: "14px", borderRadius: "8px", border: "none",
-          background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800,
-          cursor: "pointer", letterSpacing: "0.3px",
-        }}>
-          Convert to Job →
-        </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
+          <button onClick={() => onConvert(lead)} style={{
+            width: "100%", padding: "14px", borderRadius: "8px", border: "none",
+            background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800,
+            cursor: "pointer", letterSpacing: "0.3px",
+          }}>
+            Convert to Job →
+          </button>
+          <button onClick={() => onConvertToCustomer(lead)} style={{
+            width: "100%", padding: "13px", borderRadius: "8px", border: `1px solid ${COLORS.green}60`,
+            background: "transparent", color: COLORS.green, fontSize: "14px", fontWeight: 700,
+            cursor: "pointer",
+          }}>
+            👤 Convert to Customer
+          </button>
+        </div>
       )}
+      <button onClick={handleDelete} disabled={deleting} style={{
+        width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${COLORS.red}40`,
+        background: "transparent", color: COLORS.red, fontSize: "13px", fontWeight: 600,
+        cursor: "pointer", opacity: deleting ? 0.6 : 1,
+      }}>
+        {deleting ? "Deleting..." : "Delete Lead"}
+      </button>
     </div>
   );
 }
@@ -498,13 +525,21 @@ function JobPaymentActions({ job, onRefresh }) {
 // ============================================================
 // JOB DETAIL VIEW
 // ============================================================
-function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate, onRefresh }) {
+function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate, onRefresh, onDelete }) {
   const [status, setStatus] = useState(job.status);
+  const [deleting, setDeleting] = useState(false);
   const statuses = ["estimate", "scheduled", "in_progress", "completed", "invoiced", "paid"];
 
   const handleStatusChange = (newStatus) => {
     setStatus(newStatus);
     onUpdateStatus(job.id, newStatus);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete job for ${job.customer_name}? This cannot be undone.`)) return;
+    setDeleting(true);
+    await fetch(`${API_BASE}/jobs/${job.id}`, { method: "DELETE" });
+    onDelete();
   };
 
   return (
@@ -609,10 +644,18 @@ function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate, onRefresh }) {
         background: "transparent", color: COLORS.accent, fontSize: "14px", fontWeight: 700,
         cursor: "pointer", marginTop: "8px",
       }}>
-        📋 Send Estimate
+        📋 Send Quote
       </button>
 
       <JobPaymentActions job={job} onRefresh={onRefresh} />
+
+      <button onClick={handleDelete} disabled={deleting} style={{
+        width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${COLORS.red}40`,
+        background: "transparent", color: COLORS.red, fontSize: "13px", fontWeight: 600,
+        cursor: "pointer", opacity: deleting ? 0.6 : 1, marginTop: "10px",
+      }}>
+        {deleting ? "Deleting..." : "Delete Job"}
+      </button>
     </div>
   );
 }
@@ -620,8 +663,9 @@ function JobDetail({ job, onBack, onUpdateStatus, onSendEstimate, onRefresh }) {
 // ============================================================
 // ESTIMATE DETAIL VIEW (admin)
 // ============================================================
-function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh }) {
+function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete }) {
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [localStatus, setLocalStatus] = useState(estimate.status);
 
   const handleSendDiscount = async () => {
@@ -648,7 +692,7 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh }) {
         background: "none", border: "none", color: COLORS.accent, cursor: "pointer",
         fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px",
       }}>
-        ← Back to Billing
+        ← Back to Quotes
       </button>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
@@ -709,6 +753,18 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh }) {
           {sending ? "Sending..." : localStatus === "discount_offered" ? "🔄 Resend Discount Offer" : "💸 Send Discount Offer"}
         </button>
       )}
+      <button onClick={async () => {
+        if (!confirm(`Delete this quote for ${estimate.customer_name}?`)) return;
+        setDeleting(true);
+        await fetch(`${API_BASE}/estimates/${estimate.id}`, { method: "DELETE" });
+        onDelete && onDelete();
+      }} disabled={deleting} style={{
+        width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${COLORS.red}40`,
+        background: "transparent", color: COLORS.red, fontSize: "13px", fontWeight: 600,
+        cursor: "pointer", opacity: deleting ? 0.6 : 1, marginTop: "10px",
+      }}>
+        {deleting ? "Deleting..." : "Delete Quote"}
+      </button>
     </div>
   );
 }
@@ -716,8 +772,9 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh }) {
 // ============================================================
 // INVOICE DETAIL VIEW
 // ============================================================
-function InvoiceDetail({ invoice, onBack, onUpdateStatus }) {
+function InvoiceDetail({ invoice, onBack, onUpdateStatus, onDelete }) {
   const [status, setStatus] = useState(invoice.status);
+  const [deleting, setDeleting] = useState(false);
   const lineItems = Array.isArray(invoice.line_items) ? invoice.line_items : (typeof invoice.line_items === 'string' ? JSON.parse(invoice.line_items) : []);
 
   const handleStatus = (s) => {
@@ -731,7 +788,7 @@ function InvoiceDetail({ invoice, onBack, onUpdateStatus }) {
         background: "none", border: "none", color: COLORS.accent, cursor: "pointer",
         fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px",
       }}>
-        ← Back to Billing
+        ← Back to Invoices
       </button>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
@@ -804,6 +861,90 @@ function InvoiceDetail({ invoice, onBack, onUpdateStatus }) {
           ))}
         </div>
       </div>
+      <button onClick={async () => {
+        if (!confirm(`Delete invoice for ${invoice.customer_name}?`)) return;
+        setDeleting(true);
+        await fetch(`${API_BASE}/invoices/${invoice.id}`, { method: "DELETE" });
+        onDelete && onDelete();
+      }} disabled={deleting} style={{
+        width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${COLORS.red}40`,
+        background: "transparent", color: COLORS.red, fontSize: "13px", fontWeight: 600,
+        cursor: "pointer", opacity: deleting ? 0.6 : 1,
+      }}>
+        {deleting ? "Deleting..." : "Delete Invoice"}
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// EDIT LEAD FORM
+// ============================================================
+function EditLeadScreen({ lead, onBack, onSave }) {
+  const [form, setForm] = useState({
+    name: lead.name || "",
+    phone: lead.phone || "",
+    email: lead.email || "",
+    address: lead.address || "",
+    source: lead.source || "website",
+    contact_preference: lead.contact_preference || "text",
+    stump_count: lead.stump_count || "",
+    notes: lead.notes || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const inputStyle = { width: "100%", background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: "6px", color: COLORS.text, fontSize: "14px", padding: "10px 12px", boxSizing: "border-box", fontFamily: "inherit" };
+  const labelStyle = { fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", display: "block", marginBottom: "6px" };
+
+  const handleSave = async () => {
+    if (!form.name) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/leads/${lead.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, stump_count: form.stump_count ? parseInt(form.stump_count) : null }),
+      });
+      const updated = await res.json();
+      onSave(updated);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: COLORS.accent, cursor: "pointer", fontSize: "14px", fontWeight: 600, padding: "0", marginBottom: "16px", display: "flex", alignItems: "center", gap: "4px" }}>← Back</button>
+      <SectionHeader title="Edit Lead" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
+        <div><label style={labelStyle}>Name *</label><input style={inputStyle} value={form.name} onChange={e => { const v = e.target.value; set("name", v); }} placeholder="Full name" /></div>
+        <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => { const v = e.target.value; set("phone", v); }} placeholder="304-555-0000" /></div>
+        <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => { const v = e.target.value; set("email", v); }} placeholder="email@example.com" /></div>
+        <div><label style={labelStyle}>Address</label>
+          <PlacesAutocomplete value={form.address} onChange={v => set("address", v)} style={inputStyle} placeholder="123 Main St, City, WV" />
+        </div>
+        <div><label style={labelStyle}>Stump Count</label><input style={inputStyle} type="number" min="1" value={form.stump_count} onChange={e => { const v = e.target.value; set("stump_count", v); }} placeholder="# of stumps" /></div>
+        <div>
+          <label style={labelStyle}>Source</label>
+          <select style={inputStyle} value={form.source} onChange={e => set("source", e.target.value)}>
+            <option value="website">Website</option>
+            <option value="google">Google</option>
+            <option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option>
+            <option value="meta_ads">Meta Ads</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Contact Preference</label>
+          <select style={inputStyle} value={form.contact_preference} onChange={e => set("contact_preference", e.target.value)}>
+            <option value="text">Text</option>
+            <option value="call">Call</option>
+            <option value="email">Email</option>
+          </select>
+        </div>
+        <div><label style={labelStyle}>Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={form.notes} onChange={e => { const v = e.target.value; set("notes", v); }} placeholder="Any notes..." /></div>
+      </div>
+      <button onClick={handleSave} disabled={saving || !form.name} style={{ width: "100%", padding: "14px", borderRadius: "8px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800, cursor: "pointer", opacity: saving || !form.name ? 0.6 : 1 }}>
+        {saving ? "Saving..." : "Save Changes"}
+      </button>
     </div>
   );
 }
@@ -1576,7 +1717,7 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
     <div style={s.root}>
       <div style={s.header}>
         <button type="button" onClick={onCancel} style={s.backBtn}>← Back</button>
-        <h1 style={s.title}>{phase === "saved" ? "Estimate Ready" : "New Estimate"}</h1>
+        <h1 style={s.title}>{phase === "saved" ? "Quote Ready" : "New Quote"}</h1>
         <div style={s.headerAmt}>
           {fmt(phase === "saved" ? estimate?.total_amount ?? 0 : calcJob(stumps))}
         </div>
@@ -1999,7 +2140,7 @@ function DashboardScreen({ leads, jobs, estimates, invoices, onNavigate }) {
         display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
         marginBottom: "24px", fontFamily: "inherit",
       }}>
-        📋 New Estimate
+        📝 New Quote
       </button>
 
       <SectionHeader title="Recent Leads" count={leads.length}
@@ -2066,7 +2207,7 @@ function JobsScreen({ jobs, onNavigate }) {
       <SectionHeader title="Jobs" count={jobs.length}
         action={
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => onNavigate("new-estimate")} style={{ padding: "6px 14px", borderRadius: "6px", border: `1px solid ${COLORS.accent}`, background: "transparent", color: COLORS.accent, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>📋 New Estimate</button>
+            <button onClick={() => onNavigate("new-estimate")} style={{ padding: "6px 14px", borderRadius: "6px", border: `1px solid ${COLORS.accent}`, background: "transparent", color: COLORS.accent, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>📝 New Quote</button>
             <button onClick={() => onNavigate("new-job")} style={{ padding: "6px 14px", borderRadius: "6px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>+ New Job</button>
           </div>
         }
@@ -2096,8 +2237,8 @@ function JobsScreen({ jobs, onNavigate }) {
 // ============================================================
 // BILLING SCREEN (Quotes + Invoices)
 // ============================================================
-function BillingScreen({ estimates, invoices, onNavigate }) {
-  const [subTab, setSubTab] = useState("quotes");
+function BillingScreen({ estimates, invoices, onNavigate, defaultTab = "quotes" }) {
+  const [subTab, setSubTab] = useState(defaultTab);
 
   const pillStyle = (active) => ({
     flex: 1, padding: "8px", borderRadius: "6px", border: "none", cursor: "pointer",
@@ -2637,13 +2778,22 @@ function StumpProsApp() {
     navigate("job-detail", newJob);
   };
 
+  const convertLeadToCustomer = async (lead) => {
+    const res = await fetch(`${API_BASE}/leads/${lead.id}/convert-to-customer`, { method: "POST" });
+    const data = await res.json();
+    await loadData();
+    if (data.customer) navigate("customer-detail", data.customer);
+    else navigate("customers");
+  };
+
   const newLeadCount = leads.filter(l => l.status === "new").length;
   const pendingEstimateCount = estimates.filter(e => e.status === "pending").length;
 
   const activeTab = screen === "dashboard" ? "dashboard"
     : screen.includes("lead") ? "leads"
+    : (screen === "quotes" || screen.includes("estimate")) ? "quote"
+    : (screen === "invoices" || screen.includes("invoice")) ? "invoice"
     : screen.includes("job") ? "jobs"
-    : (screen.includes("estimate") || screen.includes("invoice") || screen === "billing") ? "billing"
     : screen.includes("customer") ? "customers"
     : screen;
 
@@ -2656,7 +2806,25 @@ function StumpProsApp() {
       case "new-lead":
         return <NewLeadScreen onBack={() => navigate("leads")} onSave={(lead) => { loadData(); navigate("lead-detail", lead); }} />;
       case "lead-detail":
-        return selectedItem ? <LeadDetail lead={selectedItem} onBack={() => navigate("leads")} onConvert={convertLead} onUpdateStatus={updateLeadStatus} /> : null;
+        return selectedItem ? (
+          <LeadDetail
+            lead={selectedItem}
+            onBack={() => navigate("leads")}
+            onConvert={convertLead}
+            onConvertToCustomer={convertLeadToCustomer}
+            onUpdateStatus={updateLeadStatus}
+            onEdit={() => navigate("edit-lead", selectedItem)}
+            onDelete={() => { loadData(); navigate("leads"); }}
+          />
+        ) : null;
+      case "edit-lead":
+        return selectedItem ? (
+          <EditLeadScreen
+            lead={selectedItem}
+            onBack={() => navigate("lead-detail", selectedItem)}
+            onSave={(updated) => { loadData(); navigate("lead-detail", updated); }}
+          />
+        ) : null;
       case "jobs":
         return <JobsScreen jobs={jobs} onNavigate={navigate} />;
       case "new-job":
@@ -2669,10 +2837,14 @@ function StumpProsApp() {
             onUpdateStatus={updateJobStatus}
             onSendEstimate={(job) => navigate("new-estimate", job)}
             onRefresh={loadData}
+            onDelete={() => { loadData(); navigate("dashboard"); }}
           />
         ) : null;
       case "billing":
-        return <BillingScreen estimates={estimates} invoices={invoices} onNavigate={navigate} />;
+      case "quotes":
+        return <BillingScreen estimates={estimates} invoices={invoices} onNavigate={navigate} defaultTab="quotes" />;
+      case "invoices":
+        return <BillingScreen estimates={estimates} invoices={invoices} onNavigate={navigate} defaultTab="invoices" />;
       case "new-estimate":
         return (
           <EstimateBuilder
@@ -2683,8 +2855,8 @@ function StumpProsApp() {
               email: selectedItem.email || "",
               address: selectedItem.address || "",
             } : null}
-            onDone={() => { loadData(); navigate("billing"); }}
-            onCancel={() => navigate("billing")}
+            onDone={() => { loadData(); navigate("quotes"); }}
+            onCancel={() => navigate("quotes")}
             apiBase={API_BASE}
           />
         );
@@ -2692,16 +2864,17 @@ function StumpProsApp() {
         return selectedItem ? (
           <EstimateDetail
             estimate={selectedItem}
-            onBack={() => navigate("billing")}
+            onBack={() => navigate("quotes")}
             onCreateInvoice={(est) => navigate("new-invoice", { fromEstimate: est })}
             onRefresh={loadData}
+            onDelete={() => { loadData(); navigate("quotes"); }}
           />
         ) : null;
       case "new-invoice":
         return (
           <NewInvoiceScreen
-            onBack={() => navigate("billing")}
-            onSave={() => { loadData(); navigate("billing"); }}
+            onBack={() => navigate("invoices")}
+            onSave={() => { loadData(); navigate("invoices"); }}
             jobs={jobs}
             initialData={selectedItem}
           />
@@ -2710,8 +2883,9 @@ function StumpProsApp() {
         return selectedItem ? (
           <InvoiceDetail
             invoice={selectedItem}
-            onBack={() => navigate("billing")}
+            onBack={() => navigate("invoices")}
             onUpdateStatus={updateInvoiceStatus}
+            onDelete={() => { loadData(); navigate("invoices"); }}
           />
         ) : null;
       case "customers":
@@ -2782,8 +2956,8 @@ function StumpProsApp() {
       }}>
         <IconButton icon="🏠" label="Home" active={activeTab === "dashboard"} onClick={() => navigate("dashboard")} />
         <IconButton icon="📋" label="Leads" active={activeTab === "leads"} onClick={() => navigate("leads")} badge={newLeadCount} />
-        <IconButton icon="🪵" label="Jobs" active={activeTab === "jobs"} onClick={() => navigate("jobs")} />
-        <IconButton icon="💳" label="Billing" active={activeTab === "billing"} onClick={() => navigate("billing")} badge={pendingEstimateCount} />
+        <IconButton icon="📝" label="Quotes" active={activeTab === "quote"} onClick={() => navigate("quotes")} badge={pendingEstimateCount} />
+        <IconButton icon="🧾" label="Invoices" active={activeTab === "invoice"} onClick={() => navigate("invoices")} />
         <IconButton icon="👥" label="Customers" active={activeTab === "customers"} onClick={() => navigate("customers")} />
         <IconButton icon="⚙️" label="Settings" active={activeTab === "settings"} onClick={() => navigate("settings")} />
       </div>
