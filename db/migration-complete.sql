@@ -235,17 +235,21 @@ CREATE TABLE IF NOT EXISTS review_requests (
 -- PRICING CONFIG SEED (upsert — safe to re-run)
 -- ============================================================
 INSERT INTO pricing_config (key, value, description) VALUES
-  ('price_per_inch',         '5.00',                                          'Base price per inch of stump diameter ($)'),
-  ('min_charge_per_stump',   '50.00',                                         'Minimum charge per individual stump ($)'),
-  ('min_charge_per_job',     '225.00',                                        'Minimum total job charge ($)'),
-  ('difficulty_multipliers', '{"normal":1.0,"hard":1.20,"very_dense":1.35}',  'Multipliers by wood hardness'),
-  ('access_multipliers',     '{"open":1.0,"limited":1.20,"very_limited":1.35}','Multipliers by site access'),
-  ('depth_multipliers',      '{"standard":1.0,"extra_deep":1.25}',           'Multipliers by grinding depth'),
-  ('cleanup_multipliers',    '{"none":1.0,"chips_only":1.5,"full_cleanup":2.0}','Multipliers by cleanup level'),
-  ('large_stump_price_per_inch', '6.00', 'Price per inch for stumps over 40" diameter ($)'),
-  ('roots_multipliers',   '{"none":1.0,"surface":1.25,"full_yard":1.6}',   'Multipliers by root complexity'),
-  ('height_multipliers',  '{"flush":1.0,"mid":1.20,"tall":1.35}',          'Multipliers by stump height')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value WHERE pricing_config.value = '';
+  ('price_per_inch',              '5.00',   'Base price per inch of stump diameter ($)'),
+  ('min_charge_per_stump',        '50.00',  'Minimum charge per individual stump ($)'),
+  ('min_charge_per_job',          '225.00', 'Minimum total job charge ($)'),
+  ('large_stump_price_per_inch',  '6.00',   'Price per inch for stumps over 40" diameter ($)'),
+  ('difficulty_multipliers', '{"normal":1.0,"hard":1.15,"very_dense":1.25,"decomposing":0.85}',
+                             'Additive factors by wood type (1 + delta applied to base)'),
+  ('access_multipliers',     '{"open":1.0,"limited":1.20,"very_limited":1.35}',
+                             'Additive factors by site access'),
+  ('height_multipliers',     '{"flush":1.0,"mid":1.15,"tall":1.25}',
+                             'Additive factors by stump height'),
+  ('cleanup_multipliers',    '{"none":1.0,"chips_only":1.5,"full_cleanup":2.0}',
+                             'Additive factors by cleanup level'),
+  ('roots_multipliers',      '{"none":1.0,"surface":1.25,"full_yard":1.6}',
+                             'Additive factors by root complexity')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS roots      TEXT    NOT NULL DEFAULT 'none';
 ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS height     TEXT    NOT NULL DEFAULT 'flush';

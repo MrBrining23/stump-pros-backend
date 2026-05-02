@@ -127,6 +127,30 @@ router.post('/meta', async (req, res) => {
   }
 });
 
+// POST /api/webhooks/meta/test — manually insert a test lead (debug helper)
+router.post('/meta/test', async (req, res) => {
+  try {
+    const { name = 'Test Lead', phone = '3045550000', email = null, notes = 'Test lead from webhook test endpoint' } = req.body;
+    const result = await pool.query(
+      `INSERT INTO leads (name, phone, email, source, status, auto_contacted, notes)
+       VALUES ($1, $2, $3, 'meta_ads', 'new', false, $4) RETURNING *`,
+      [name, phone, email, notes]
+    );
+    res.json({ ok: true, lead: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/webhooks/meta/status — check webhook config
+router.get('/meta/status', (req, res) => {
+  res.json({
+    has_verify_token:  !!process.env.META_WEBHOOK_VERIFY_TOKEN,
+    has_access_token:  !!process.env.META_PAGE_ACCESS_TOKEN,
+    webhook_url:       `${process.env.APP_URL || 'https://stump-pros-backend-production.up.railway.app'}/api/webhooks/meta`,
+  });
+});
+
 // ──────────────────────────────────────────
 // QUO (OPENPHONE) INBOUND SMS WEBHOOK
 // ──────────────────────────────────────────

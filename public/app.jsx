@@ -959,37 +959,85 @@ const PRICE_PER_INCH = 5.00;
 const MIN_PER_STUMP  = 50.00;
 const MIN_PER_JOB    = 225.00;
 
+// add = fractional surcharge added to 1.0 base (additive, not compounding)
+// e.g. hard: 0.15 means base × (1 + 0.15 + other_adds...)
 const DIFFICULTY_OPTS = [
-  { value: "normal",     label: "Normal",     mult: 1.00 },
-  { value: "hard",       label: "Hard",       mult: 1.20 },
-  { value: "very_dense", label: "Very Dense", mult: 1.35 },
+  { value: "normal",      label: "Normal",      add: 0.00 },
+  { value: "hard",        label: "Hard",        add: 0.15 },
+  { value: "very_dense",  label: "Very Dense",  add: 0.25 },
+  { value: "decomposing", label: "Decomposing", add: -0.15 },
 ];
 const ACCESS_OPTS = [
-  { value: "open",         label: "Open",         mult: 1.00 },
-  { value: "limited",      label: "Limited",      mult: 1.20 },
-  { value: "very_limited", label: "Very Limited", mult: 1.35 },
-];
-const DEPTH_OPTS = [
-  { value: "standard",   label: "Standard",  mult: 1.00 },
-  { value: "extra_deep", label: "Extra Deep",mult: 1.25 },
+  { value: "open",         label: "Open",         add: 0.00 },
+  { value: "limited",      label: "Limited",      add: 0.20 },
+  { value: "very_limited", label: "Very Limited", add: 0.35 },
 ];
 const HEIGHT_OPTS = [
-  { value: "flush", label: 'Flush–6"',  mult: 1.00 },
-  { value: "mid",   label: '7–15"',     mult: 1.20 },
-  { value: "tall",  label: '16"+',      mult: 1.35 },
+  { value: "flush", label: 'Flush–6"', add: 0.00 },
+  { value: "mid",   label: '7–15"',   add: 0.15 },
+  { value: "tall",  label: '16"+',    add: 0.25 },
 ];
 const CLEANUP_OPTS = [
-  { value: "none",         label: "None",              mult: 1.00 },
-  { value: "chips_only",   label: "Chips",             mult: 1.50 },
-  { value: "full_cleanup", label: "Full Restoration",  mult: 2.00 },
+  { value: "none",         label: "None",             add: 0.00 },
+  { value: "chips_only",   label: "Chips",            add: 0.50 },
+  { value: "full_cleanup", label: "Full Restoration", add: 1.00 },
 ];
 const ROOTS_OPTS = [
-  { value: "none",       label: "None / Minimal",        mult: 1.00 },
-  { value: "surface",    label: "Mound / Surface Roots",  mult: 1.25 },
-  { value: "full_yard",  label: "Whole Area / Yard",      mult: 1.60 },
+  { value: "none",      label: "None / Minimal",       add: 0.00 },
+  { value: "surface",   label: "Mound / Surface Roots", add: 0.25 },
+  { value: "full_yard", label: "Whole Area / Yard",     add: 0.60 },
 ];
 
 const CAPTION_SUGGESTIONS = ["Before", "After", "Stump 1", "Stump 2", "Access", "Roots"];
+
+// ── Google Places address autocomplete ───────────────────────────────────────
+// Falls back to a plain text input if Maps API is not loaded (no API key set).
+function PlacesAutocomplete({ value, onChange, style, placeholder }) {
+  const inputRef   = useRef(null);
+  const acRef      = useRef(null);
+  const [ready, setReady] = useState(!!window.google?.maps?.places);
+
+  // Init autocomplete once Maps is available
+  const init = useCallback(() => {
+    if (!inputRef.current || !window.google?.maps?.places || acRef.current) return;
+    const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
+      types: ['address'],
+      componentRestrictions: { country: 'us' },
+      fields: ['formatted_address', 'address_components'],
+    });
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      if (!place.address_components) return;
+      const get  = t => (place.address_components.find(c => c.types.includes(t)) || {}).long_name  || '';
+      const getS = t => (place.address_components.find(c => c.types.includes(t)) || {}).short_name || '';
+      const street = [get('street_number'), get('route')].filter(Boolean).join(' ');
+      const city   = get('locality') || get('sublocality') || get('administrative_area_level_3');
+      const state  = getS('administrative_area_level_1');
+      const zip    = get('postal_code');
+      onChange([street, city, state, zip].filter(Boolean).join(', '));
+    });
+    acRef.current = ac;
+    setReady(true);
+  }, [onChange]);
+
+  useEffect(() => {
+    init();
+    window.addEventListener('google-maps-ready', init);
+    return () => window.removeEventListener('google-maps-ready', init);
+  }, [init]);
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={value}
+      onChange={e => { const v = e.target.value; onChange(v); }}
+      style={style}
+      placeholder={placeholder || 'Service Address'}
+      autoComplete={ready ? 'off' : 'street-address'}
+    />
+  );
+}
 
 // ── Customer Picker Modal ─────────────────────────────────────────────────
 function CustomerPickerModal({ onSelect, onClose }) {
@@ -1050,16 +1098,20 @@ function CustomerPickerModal({ onSelect, onClose }) {
 function calcStump(s) {
   const d = parseFloat(s.diameter);
   if (!d || d <= 0) return 0;
-  const rate      = d > 40 ? 6.00 : PRICE_PER_INCH;
-  const base      = d * rate;
-  const diff      = DIFFICULTY_OPTS.find(o => o.value === s.difficulty)?.mult        ?? 1;
-  const acc       = ACCESS_OPTS.find(o => o.value === s.access)?.mult                ?? 1;
-  const hgt       = HEIGHT_OPTS.find(o => o.value === (s.height||"flush"))?.mult     ?? 1;
-  const clean     = CLEANUP_OPTS.find(o => o.value === s.cleanup)?.mult              ?? 1;
-  const roots     = ROOTS_OPTS.find(o => o.value === s.roots)?.mult                  ?? 1;
-  const rocky     = s.rocky      ? 1.20 : 1.0;
-  const extraDeep = s.extra_deep ? 1.25 : 1.0;
-  return Math.max(base * diff * acc * hgt * clean * roots * rocky * extraDeep, MIN_PER_STUMP);
+  const rate = d > 40 ? 6.00 : PRICE_PER_INCH;
+  const base = Math.max(d * rate, MIN_PER_STUMP);
+
+  // Each option adds its percentage to the base — no compounding
+  const adds =
+    (DIFFICULTY_OPTS.find(o => o.value === s.difficulty)?.add       ?? 0) +
+    (ACCESS_OPTS.find(o => o.value === s.access)?.add                ?? 0) +
+    (HEIGHT_OPTS.find(o => o.value === (s.height||"flush"))?.add     ?? 0) +
+    (CLEANUP_OPTS.find(o => o.value === s.cleanup)?.add              ?? 0) +
+    (ROOTS_OPTS.find(o => o.value === s.roots)?.add                  ?? 0) +
+    (s.rocky      ? 0.20 : 0) +
+    (s.extra_deep ? 0.20 : 0);
+
+  return Math.round(base * (1 + adds) * 100) / 100;
 }
 function volumeDiscount(count) {
   return count >= 21 ? 0.25 : count >= 11 ? 0.20 : count >= 5 ? 0.15 : 0;
@@ -1087,7 +1139,7 @@ function Segs({ label, value, onChange, options }) {
         {options.map(o => (
           <button key={o.value} type="button" onClick={() => onChange(o.value)}
             style={{ ...s.seg, ...(value === o.value ? s.segOn : {}) }}>
-            {o.label}{o.mult !== 1 && <span style={s.badge}> ×{o.mult}</span>}
+            {o.label}{o.add !== 0 && <span style={s.badge}> {o.add > 0 ? `+${Math.round(o.add*100)}%` : `${Math.round(o.add*100)}%`}</span>}
           </button>
         ))}
       </div>
@@ -1475,7 +1527,7 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(data.detail || data.error || "Save failed");
       setEstimate(data);
       setPhotos(data.photos || []);
 
@@ -1542,12 +1594,21 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
                 📋 Load Customer
               </button>
             </div>
-            {[{k:"name",ph:"Full Name *",t:"text"},{k:"phone",ph:"Phone *",t:"tel"},
-              {k:"email",ph:"Email (optional)",t:"email"},{k:"address",ph:"Service Address",t:"text"}]
-              .map(f => (
-                <input key={f.k} type={f.t} placeholder={f.ph} value={customer[f.k]}
-                  onChange={e=>setCustomer(p=>({...p,[f.k]:e.target.value}))} style={s.input}/>
-              ))}
+            <input type="text" placeholder="Full Name *" value={customer.name}
+              onChange={e => { const v = e.target.value; setCustomer(p => ({...p, name: v})); }}
+              style={s.input} autoComplete="name" />
+            <input type="tel" placeholder="Phone *" value={customer.phone}
+              onChange={e => { const v = e.target.value; setCustomer(p => ({...p, phone: v})); }}
+              style={s.input} autoComplete="tel" />
+            <input type="email" placeholder="Email (optional)" value={customer.email}
+              onChange={e => { const v = e.target.value; setCustomer(p => ({...p, email: v})); }}
+              style={s.input} autoComplete="email" />
+            <PlacesAutocomplete
+              value={customer.address}
+              onChange={v => setCustomer(p => ({...p, address: v}))}
+              style={s.input}
+              placeholder="Service Address"
+            />
           </section>
 
           <section style={s.sec}>
@@ -2402,8 +2463,8 @@ function CustomersScreen({ onNavigate }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {customers.map(c => (
-            <div key={c.id} onClick={() => onNavigate("customer-detail", c)} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "10px", padding: "12px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
+            <div key={c.id} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "10px", padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => onNavigate("customer-detail", c)}>
                 <div style={{ fontSize: "14px", fontWeight: 700, color: COLORS.text, display: "flex", alignItems: "center", gap: "8px" }}>
                   {c.name}
                   {c.source !== "manual" && <span style={{ fontSize: "10px", fontWeight: 700, background: sourceBg(c.source), color: sourceColor(c.source), padding: "2px 6px", borderRadius: "4px" }}>{sourceLabel(c.source)}</span>}
@@ -2411,7 +2472,10 @@ function CustomersScreen({ onNavigate }) {
                 {c.phone && <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "2px" }}>📞 {c.phone}</div>}
                 {c.address && <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📍 {c.address}</div>}
               </div>
-              <div style={{ color: COLORS.textDim, fontSize: "16px", marginLeft: "8px" }}>›</div>
+              <button onClick={e => { e.stopPropagation(); onNavigate("add-customer", c); }}
+                style={{ marginLeft: 10, background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 6, color: COLORS.textMuted, fontSize: 12, padding: "5px 10px", cursor: "pointer", flexShrink: 0 }}>
+                ✏️ Edit
+              </button>
             </div>
           ))}
         </div>
@@ -2482,7 +2546,9 @@ function AddCustomerScreen({ onBack, onSave, existing = null }) {
         <div><label style={labelStyle}>Name *</label><input style={inputStyle} value={form.name} onChange={e => set("name", e.target.value)} placeholder="Full name" /></div>
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
-        <div><label style={labelStyle}>Address</label><input style={inputStyle} value={form.address} onChange={e => set("address", e.target.value)} placeholder="123 Main St" /></div>
+        <div><label style={labelStyle}>Address</label>
+          <PlacesAutocomplete value={form.address} onChange={v => set("address", v)} style={inputStyle} placeholder="123 Main St, City, WV" />
+        </div>
         <div><label style={labelStyle}>Notes</label><textarea style={{ ...inputStyle, resize: "vertical" }} rows={3} value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Any notes..." /></div>
       </div>
       <button onClick={handleSave} disabled={saving || !form.name} style={{ width: "100%", padding: "14px", borderRadius: "8px", border: "none", background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800, cursor: "pointer", opacity: saving || !form.name ? 0.6 : 1 }}>

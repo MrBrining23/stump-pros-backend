@@ -55,14 +55,42 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
-async function start() {
+async function runMigration() {
+  // Run the full migration file first (idempotent)
   try {
     const schema = fs.readFileSync(path.join(__dirname, 'db', 'migration-complete.sql'), 'utf8');
     await pool.query(schema);
-    console.log('Database schema ready.');
+    console.log('Migration file applied.');
   } catch (err) {
-    console.error('Database init error:', err);
+    console.error('Migration file error (will apply safety patches):', err.message);
   }
+
+  // Safety patches — run individually so one failure doesn't block the others
+  const patches = [
+    `CREATE EXTENSION IF NOT EXISTS "pgcrypto"`,
+    `CREATE TABLE IF NOT EXISTS oauth_tokens (
+       id SERIAL PRIMARY KEY, provider TEXT UNIQUE NOT NULL,
+       access_token TEXT, refresh_token TEXT, realm_id TEXT,
+       expires_at TIMESTAMPTZ, updated_at TIMESTAMPTZ DEFAULT NOW())`,
+    `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS roots      TEXT    NOT NULL DEFAULT 'none'`,
+    `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS height     TEXT    NOT NULL DEFAULT 'flush'`,
+    `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS rocky      BOOLEAN NOT NULL DEFAULT FALSE`,
+    `ALTER TABLE estimate_stump_items ADD COLUMN IF NOT EXISTS extra_deep BOOLEAN NOT NULL DEFAULT FALSE`,
+    `ALTER TABLE estimate_photos      ADD COLUMN IF NOT EXISTS stump_number INTEGER`,
+    `ALTER TABLE messages  ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE`,
+    `ALTER TABLE messages  ADD COLUMN IF NOT EXISTS job_id  INTEGER REFERENCES jobs(id)  ON DELETE CASCADE`,
+    `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id) ON DELETE SET NULL`,
+  ];
+
+  for (const sql of patches) {
+    try { await pool.query(sql); }
+    catch (e) { console.warn('Patch skipped:', e.message.split('\n')[0]); }
+  }
+  console.log('Database schema ready.');
+}
+
+async function start() {
+  await runMigration();
   app.listen(PORT, () => {
     console.log(`Stump Pros backend running on port ${PORT}`);
     startCronJobs();

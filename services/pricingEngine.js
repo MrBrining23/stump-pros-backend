@@ -1,16 +1,24 @@
 /**
  * services/pricingEngine.js — Stump Pros WV
  *
- * Loads pricing config from DB settings table and calculates job totals.
+ * Pricing model: ADDITIVE (not compounding).
+ * Each option adds its percentage to the base price independently,
+ * so surcharges don't multiply on top of each other.
  *
- * Config keys (all stored in settings table):
- *   price_per_inch         — base price per inch of diameter ($5.00)
- *   min_charge_per_stump   — minimum per individual stump ($50.00)
- *   min_charge_per_job     — minimum total job charge ($225.00)
- *   difficulty_multipliers — JSON object of difficulty → multiplier
- *   access_multipliers     — JSON object of access → multiplier
- *   height_multipliers     — JSON object of height → multiplier
- *   cleanup_multipliers    — JSON object of cleanup → multiplier
+ * Multipliers stored as full factors (1 + delta) in pricing_config.
+ * calculateJob converts each to delta = mult - 1, sums all deltas,
+ * then applies: subtotal = base × (1 + total_delta)
+ *
+ * Config keys (all stored in pricing_config table):
+ *   price_per_inch              — base $/inch ($5.00)
+ *   large_stump_price_per_inch  — $/inch for stumps >40" ($6.00)
+ *   min_charge_per_stump        — floor per stump ($50.00)
+ *   min_charge_per_job          — floor per job ($225.00)
+ *   difficulty_multipliers      — JSON { normal, hard, very_dense, decomposing }
+ *   access_multipliers          — JSON { open, limited, very_limited }
+ *   height_multipliers          — JSON { flush, mid, tall }
+ *   cleanup_multipliers         — JSON { none, chips_only, full_cleanup }
+ *   roots_multipliers           — JSON { none, surface, full_yard }
  */
 
 const pool = require('../db/pool');
@@ -20,17 +28,16 @@ const DEFAULTS = {
   large_stump_price_per_inch:   6.00,
   min_charge_per_stump:         50.00,
   min_charge_per_job:           225.00,
-  difficulty_multipliers: { normal: 1.0, hard: 1.20, very_dense: 1.35 },
+  // Factors stored as (1 + delta); e.g. hard: 1.15 means +15% of base
+  difficulty_multipliers: { normal: 1.0, hard: 1.15, very_dense: 1.25, decomposing: 0.85 },
   access_multipliers:     { open: 1.0, limited: 1.20, very_limited: 1.35 },
-  height_multipliers:     { flush: 1.0, mid: 1.20, tall: 1.35 },
+  height_multipliers:     { flush: 1.0, mid: 1.15, tall: 1.25 },
   cleanup_multipliers:    { none: 1.0, chips_only: 1.5, full_cleanup: 2.0 },
   roots_multipliers:      { none: 1.0, surface: 1.25, full_yard: 1.6 },
-  rocky:                  false,
-  extra_deep:             false,
 };
 
 const LABELS = {
-  difficulty: { normal: 'Normal', hard: 'Hard Wood', very_dense: 'Very Dense' },
+  difficulty: { normal: 'Normal', hard: 'Hard Wood', very_dense: 'Very Dense', decomposing: 'Decomposing' },
   access:     { open: 'Open Access', limited: 'Limited Access', very_limited: 'Very Limited Access' },
   height:     { flush: 'Flush to 6"', mid: '7–15"', tall: '16"+"' },
   cleanup:    { none: 'Chips Left', chips_only: 'Chips Removed', full_cleanup: 'Full Cleanup' },
@@ -39,8 +46,8 @@ const LABELS = {
 };
 
 /**
- * Load pricing configuration from the settings table.
- * Falls back to defaults for any missing keys.
+ * Load pricing configuration from the pricing_config table.
+ * Falls back to DEFAULTS for any missing keys.
  */
 async function loadPricingConfig() {
   try {
@@ -65,30 +72,15 @@ async function loadPricingConfig() {
     }
     return config;
   } catch (_) {
-    // If settings table not yet available, use defaults
     return { ...DEFAULTS };
   }
 }
 
 /**
- * Calculate pricing for an array of stumps.
+ * Calculate pricing for an array of stumps using ADDITIVE surcharges.
+ * Each surcharge is calculated as a % of base_price, not compounded.
  *
- * @param {Array<{
- *   diameter_inches: number,
- *   difficulty?: string,
- *   access?: string,
- *   height?: string,
- *   cleanup?: string,
- *   notes?: string
- * }>} stumps
- * @param {object} config  Result of loadPricingConfig()
- *
- * @returns {{
- *   stumps: Array<stump + base_price + subtotal + stump_number>,
- *   stump_subtotal: number,
- *   job_total: number,
- *   job_minimum_applied: boolean,
- * }}
+ * subtotal = base_price × (1 + diff_delta + access_delta + height_delta + ...)
  */
 function calculateJob(stumps, config) {
   const {
@@ -112,24 +104,19 @@ function calculateJob(stumps, config) {
     const roots    = s.roots      || 'none';
 
     const ratePerInch = diameter > 40 ? largePricePerInch : pricePerInch;
-    const base_price = Math.max(
-      diameter * ratePerInch,
-      minPerStump
-    );
+    const base_price  = Math.max(diameter * ratePerInch, minPerStump);
 
-    const rockyMult = s.rocky      ? 1.20 : 1.0;
-    const deepMult  = s.extra_deep ? 1.25 : 1.0;
+    // Convert each factor to an additive delta, then sum (no compounding)
+    const total_adds =
+      ((diffMult[diff]       || 1.0) - 1.0) +
+      ((accessMult[access]   || 1.0) - 1.0) +
+      ((heightMult[height]   || 1.0) - 1.0) +
+      ((cleanupMult[cleanup] || 1.0) - 1.0) +
+      ((rootsMult[roots]     || 1.0) - 1.0) +
+      (s.rocky      ? 0.20 : 0.0) +
+      (s.extra_deep ? 0.20 : 0.0);  // extra deep = +20%
 
-    const multiplier =
-      (diffMult[diff]        || 1.0) *
-      (accessMult[access]    || 1.0) *
-      (heightMult[height]    || 1.0) *
-      (cleanupMult[cleanup]  || 1.0) *
-      (rootsMult[roots]      || 1.0) *
-      rockyMult *
-      deepMult;
-
-    const subtotal = Math.round(base_price * multiplier * 100) / 100;
+    const subtotal = Math.round(base_price * (1 + total_adds) * 100) / 100;
 
     return {
       ...s,
@@ -154,7 +141,6 @@ function calculateJob(stumps, config) {
     count >= 11 ? 0.20 :
     count >= 5  ? 0.15 : 0;
 
-  // Apply discount to each stump's subtotal
   const discounted = priced.map(s => ({
     ...s,
     subtotal: volume_discount > 0
@@ -162,18 +148,14 @@ function calculateJob(stumps, config) {
       : s.subtotal,
   }));
 
-  const stump_subtotal = Math.round(discounted.reduce((sum, s) => sum + s.subtotal, 0) * 100) / 100;
+  const stump_subtotal      = Math.round(discounted.reduce((sum, s) => sum + s.subtotal, 0) * 100) / 100;
   const job_minimum_applied = stump_subtotal < minPerJob;
-  // Round job_total UP to the nearest $25 interval (stump_subtotal stays unrounded for display)
-  const raw_total = job_minimum_applied ? minPerJob : stump_subtotal;
-  const job_total = Math.ceil(raw_total / 25) * 25;
+  const raw_total           = job_minimum_applied ? minPerJob : stump_subtotal;
+  const job_total           = Math.ceil(raw_total / 25) * 25;  // round up to nearest $25
 
   return { stumps: discounted, stump_subtotal, job_total, job_minimum_applied, volume_discount };
 }
 
-/**
- * Format a number as a dollar string, e.g. 225 → "$225.00"
- */
 function formatDollars(amount) {
   return `$${parseFloat(amount || 0).toFixed(2)}`;
 }

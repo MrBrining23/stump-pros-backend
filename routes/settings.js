@@ -42,4 +42,9 @@ router.put('/', async (req, res) => {
   }
 });
 
+// GET /api/settings/maps-key — returns Google Maps API key for Places autocomplete
+router.get('/maps-key', (req, res) => {
+  res.json({ key: process.env.GOOGLE_MAPS_API_KEY || '' });
+});
+
 module.exports = router;
