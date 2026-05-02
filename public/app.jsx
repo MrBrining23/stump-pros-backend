@@ -667,6 +667,33 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete
   const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [localStatus, setLocalStatus] = useState(estimate.status);
+  const [fullData, setFullData] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/estimates/${estimate.id}`)
+      .then(r => r.json())
+      .then(d => { setFullData(d); setLocalStatus(d.status); })
+      .catch(() => {});
+  }, [estimate.id]);
+
+  const stumpItems = fullData?.stump_items || [];
+
+  const handleSendQuote = async () => {
+    if (!confirm(`Send quote to ${estimate.customer_name} via SMS?`)) return;
+    setSending(true);
+    try {
+      const res = await fetch(`${API_BASE}/estimates/${estimate.id}/send`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Send failed");
+      setLocalStatus("sent");
+      onRefresh && onRefresh();
+      alert("Quote sent!");
+    } catch (err) {
+      alert("Failed to send: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleSendDiscount = async () => {
     if (!confirm("Send a discount offer SMS to this customer?")) return;
@@ -683,7 +710,8 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete
     }
   };
 
-  const canSendDiscount = ["pending", "declined", "discount_offered"].includes(localStatus);
+  const canSendQuote = ["draft", "sent"].includes(localStatus);
+  const canSendDiscount = ["sent", "declined", "discount_offered"].includes(localStatus);
   const canCreateInvoice = ["approved", "discount_approved"].includes(localStatus);
 
   return (
@@ -704,8 +732,8 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete
       </div>
 
       <Card style={{ marginBottom: "12px" }}>
-        <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Estimate Amount</div>
-        <div style={{ fontSize: "28px", fontWeight: 900, color: COLORS.accent, letterSpacing: "-1px" }}>{formatCurrency(estimate.amount)}</div>
+        <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Quote Total</div>
+        <div style={{ fontSize: "28px", fontWeight: 900, color: COLORS.accent, letterSpacing: "-1px" }}>{formatCurrency(estimate.total_amount || estimate.amount)}</div>
         {estimate.discounted_amount && (
           <div style={{ fontSize: "13px", color: COLORS.blue, marginTop: "4px" }}>
             Discount offer: {formatCurrency(estimate.discounted_amount)} ({estimate.discount_pct}% off)
@@ -713,10 +741,19 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete
         )}
       </Card>
 
-      {estimate.description && (
+      {stumpItems.length > 0 && (
         <Card style={{ marginBottom: "12px" }}>
-          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Description</div>
-          <div style={{ fontSize: "14px", color: COLORS.text, lineHeight: 1.5 }}>{estimate.description}</div>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: COLORS.textDim, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>Stump Breakdown</div>
+          {stumpItems.map((item, i) => (
+            <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: "8px", marginBottom: "8px", borderBottom: i < stumpItems.length - 1 ? `1px solid ${COLORS.border}` : "none" }}>
+              <div style={{ fontSize: "13px", color: COLORS.textMuted, flex: 1, lineHeight: 1.5 }}>
+                Stump {item.stump_number} — {item.diameter_inches}" · {item.difficulty}
+                {item.height && item.height !== "flush" ? ` · ${item.height}` : ""}
+                {item.extra_deep ? " · extra deep" : ""}{item.rocky ? " · rocky" : ""}
+              </div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: COLORS.accent, marginLeft: "12px" }}>{formatCurrency(item.subtotal)}</div>
+            </div>
+          ))}
         </Card>
       )}
 
@@ -733,6 +770,16 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete
         {estimate.responded_at && <div style={{ fontSize: "13px", color: COLORS.textMuted }}>💬 Responded {timeAgo(estimate.responded_at)}</div>}
         {!estimate.sent_at && <div style={{ fontSize: "13px", color: COLORS.textDim }}>Not yet sent</div>}
       </Card>
+
+      {canSendQuote && (
+        <button onClick={handleSendQuote} disabled={sending} style={{
+          width: "100%", padding: "14px", borderRadius: "8px", border: "none",
+          background: COLORS.accent, color: COLORS.bg, fontSize: "14px", fontWeight: 800,
+          cursor: "pointer", opacity: sending ? 0.6 : 1, marginBottom: "10px",
+        }}>
+          {sending ? "Sending…" : localStatus === "sent" ? "📱 Resend Quote to Customer" : "📱 Send Quote to Customer"}
+        </button>
+      )}
 
       {canCreateInvoice && (
         <button onClick={() => onCreateInvoice(estimate)} style={{
@@ -1644,6 +1691,11 @@ function EstimateBuilder({ lead = null, onDone, onCancel, apiBase }) {
   const removeStump = id  => setStumps(p => p.filter(s => s.id !== id));
   const updateStump = useCallback((id, f, v) =>
     setStumps(p => p.map(s => s.id === id ? { ...s, [f]: v } : s)), []);
+
+  // Scroll to top when phase changes so the user sees the new content
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [phase]);
 
   async function handleSave() {
     setError(null);
