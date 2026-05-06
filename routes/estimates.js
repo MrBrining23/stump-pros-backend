@@ -372,6 +372,10 @@ router.post('/:id/send', async (req, res) => {
     const est = await getEstimateWithItems(req.params.id);
     if (!est) return res.status(404).json({ error: 'Not found' });
 
+    if (!est.customer_phone) {
+      return res.status(400).json({ error: 'No phone number on this quote — please edit the quote and add a phone number first.' });
+    }
+
     const approvalUrl = `${APP_URL}/e/${est.approval_token}`;
     const firstName   = est.customer_name.split(' ')[0];
 
@@ -380,7 +384,7 @@ router.post('/:id/send', async (req, res) => {
       .join('\n');
 
     const sms =
-      `Hi ${firstName}, here's your Stump Pros WV estimate:\n\n` +
+      `Hi ${firstName}, here's your Stump Pros WV quote:\n\n` +
       `${stumpLines}\n\n` +
       `Total: ${formatDollars(est.total_amount)}\n\n` +
       `Tap to review & approve:\n${approvalUrl}\n\n` +
@@ -396,7 +400,8 @@ router.post('/:id/send', async (req, res) => {
     res.json({ success: true, approval_url: approvalUrl });
   } catch (err) {
     console.error('Send estimate error:', err);
-    res.status(500).json({ error: 'Failed to send estimate' });
+    const msg = err.response?.data?.message || err.response?.data?.error || err.message || 'Failed to send';
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -736,5 +741,142 @@ function buildApprovalPage(est, photos, token) {
 </body>
 </html>`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRINT / PDF VIEW  GET /api/estimates/:id/print
+// Returns a standalone, print-ready HTML page for saving as PDF
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/:id/print', async (req, res) => {
+  try {
+    const est = await getEstimateWithItems(req.params.id);
+    if (!est) return res.status(404).send('<h2 style="font-family:sans-serif;padding:40px">Quote not found.</h2>');
+
+    const issued  = new Date(est.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const validUntil = est.valid_until
+      ? new Date(est.valid_until).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : '';
+
+    const rows = est.stump_items.map((s, i) => `
+      <tr>
+        <td>Stump ${i + 1} — ${s.diameter_inches}" diameter${s.difficulty && s.difficulty !== 'normal' ? `, ${s.difficulty}` : ''}${s.rocky ? ', rocky terrain' : ''}${s.extra_deep ? ', extra deep' : ''}</td>
+        <td class="right">${formatDollars(s.subtotal)}</td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Quote #${est.id} — ${est.customer_name}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #fff; color: #1a1a1a; font-size: 14px; }
+    .page { max-width: 760px; margin: 0 auto; padding: 40px 32px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 3px solid #1a1a1a; padding-bottom: 24px; }
+    .brand-name { font-size: 28px; font-weight: 900; letter-spacing: -0.5px; color: #1a1a1a; }
+    .brand-tagline { font-size: 12px; color: #666; margin-top: 4px; }
+    .brand-contact { text-align: right; font-size: 13px; color: #444; line-height: 1.7; }
+    .doc-title { font-size: 32px; font-weight: 900; color: #c4a43e; letter-spacing: -1px; margin-bottom: 6px; }
+    .doc-meta { font-size: 13px; color: #888; margin-bottom: 28px; }
+    .two-col { display: flex; gap: 40px; margin-bottom: 32px; }
+    .col { flex: 1; }
+    .label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #999; margin-bottom: 6px; }
+    .value { font-size: 15px; font-weight: 600; color: #1a1a1a; line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+    thead tr { background: #f5f5f5; }
+    th { padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #666; text-align: left; }
+    th.right, td.right { text-align: right; }
+    td { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid #f0f0f0; color: #333; }
+    .total-row td { font-size: 16px; font-weight: 800; color: #c4a43e; border-bottom: none; border-top: 2px solid #1a1a1a; padding-top: 14px; }
+    .section-box { border: 1px solid #e8e8e8; border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+    .notes-box { background: #fafafa; border: 1px solid #e8e8e8; border-radius: 10px; padding: 16px 18px; margin-bottom: 24px; }
+    .notes-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #999; margin-bottom: 8px; }
+    .notes-text { font-size: 13px; color: #444; line-height: 1.7; }
+    .footer { margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px; font-size: 12px; color: #999; display: flex; justify-content: space-between; }
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 12px; vertical-align: middle; background: #f5f5f5; color: #666; }
+    .status-approved { background: #d4edda; color: #1a7a3c; }
+    .status-sent { background: #d1e7ff; color: #0a58ca; }
+    .status-draft { background: #f5f5f5; color: #666; }
+    .valid-notice { font-size: 12px; color: #888; margin-top: 8px; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display: none; }
+    }
+    .print-btn {
+      position: fixed; top: 16px; right: 16px; background: #1a1a1a; color: #fff;
+      border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px;
+      font-weight: 700; cursor: pointer; font-family: inherit; z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">Save as PDF ↓</button>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="brand-name">Stump Pros WV</div>
+        <div class="brand-tagline">Professional Stump Grinding & Removal</div>
+      </div>
+      <div class="brand-contact">
+        📞 304-712-2005<br/>
+        Charleston, WV &amp; surrounding areas<br/>
+        stumpproswv.com
+      </div>
+    </div>
+
+    <div>
+      <div class="doc-title">
+        Quote
+        <span class="status-badge status-${est.status}">${est.status.charAt(0).toUpperCase() + est.status.slice(1)}</span>
+      </div>
+      <div class="doc-meta">Quote #${est.id} &nbsp;·&nbsp; Issued ${issued}${validUntil ? ` &nbsp;·&nbsp; Valid until ${validUntil}` : ''}</div>
+    </div>
+
+    <div class="two-col">
+      <div class="col">
+        <div class="label">Prepared For</div>
+        <div class="value">${est.customer_name}</div>
+        ${est.customer_phone ? `<div style="font-size:13px;color:#666;margin-top:3px;">${est.customer_phone}</div>` : ''}
+        ${est.customer_email ? `<div style="font-size:13px;color:#666;">${est.customer_email}</div>` : ''}
+      </div>
+      ${est.address ? `<div class="col"><div class="label">Job Address</div><div class="value" style="line-height:1.6;">${est.address.replace(/,/g, ',<br/>')}</div></div>` : ''}
+    </div>
+
+    <div class="section-box">
+      <table>
+        <thead><tr><th>Description</th><th class="right">Amount</th></tr></thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row"><td>Total</td><td class="right">${formatDollars(est.total_amount)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    ${est.notes ? `<div class="notes-box"><div class="notes-label">Notes</div><div class="notes-text">${est.notes}</div></div>` : ''}
+
+    <div class="notes-box" style="background:#fff8e6;border-color:#f0d070;">
+      <div class="notes-label">How to Accept</div>
+      <div class="notes-text">
+        Reply "yes" to the quote link we texted you, or call 304-712-2005 to schedule.<br/>
+        This quote is valid for 30 days from the issued date.
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Stump Pros WV &nbsp;·&nbsp; 304-712-2005 &nbsp;·&nbsp; Charleston, WV</span>
+      <span>Thank you for your business!</span>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (err) {
+    console.error('Print estimate error:', err);
+    res.status(500).send('<h2 style="font-family:sans-serif;padding:40px">Error generating quote. Please try again.</h2>');
+  }
+});
 
 module.exports = router;

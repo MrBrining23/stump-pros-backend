@@ -795,11 +795,20 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete
         <button onClick={handleSendDiscount} disabled={sending} style={{
           width: "100%", padding: "13px", borderRadius: "8px", border: `1px solid ${COLORS.blueDim}`,
           background: "transparent", color: COLORS.blue, fontSize: "14px", fontWeight: 700,
-          cursor: "pointer", opacity: sending ? 0.6 : 1,
+          cursor: "pointer", opacity: sending ? 0.6 : 1, marginBottom: "10px",
         }}>
           {sending ? "Sending..." : localStatus === "discount_offered" ? "🔄 Resend Discount Offer" : "💸 Send Discount Offer"}
         </button>
       )}
+
+      <button onClick={() => window.open(`${API_BASE}/estimates/${estimate.id}/print`, '_blank')} style={{
+        width: "100%", padding: "13px", borderRadius: "8px", border: `1px solid ${COLORS.border}`,
+        background: "transparent", color: COLORS.text, fontSize: "14px", fontWeight: 600,
+        cursor: "pointer", marginBottom: "10px",
+      }}>
+        📄 Preview / Save as PDF
+      </button>
+
       <button onClick={async () => {
         if (!confirm(`Delete this quote for ${estimate.customer_name}?`)) return;
         setDeleting(true);
@@ -808,7 +817,7 @@ function EstimateDetail({ estimate, onBack, onCreateInvoice, onRefresh, onDelete
       }} disabled={deleting} style={{
         width: "100%", padding: "12px", borderRadius: "8px", border: `1px solid ${COLORS.red}40`,
         background: "transparent", color: COLORS.red, fontSize: "13px", fontWeight: 600,
-        cursor: "pointer", opacity: deleting ? 0.6 : 1, marginTop: "10px",
+        cursor: "pointer", opacity: deleting ? 0.6 : 1, marginTop: "0",
       }}>
         {deleting ? "Deleting..." : "Delete Quote"}
       </button>
@@ -908,6 +917,14 @@ function InvoiceDetail({ invoice, onBack, onUpdateStatus, onDelete }) {
           ))}
         </div>
       </div>
+      <button onClick={() => window.open(`${API_BASE}/invoices/${invoice.id}/print`, '_blank')} style={{
+        width: "100%", padding: "13px", borderRadius: "8px", border: `1px solid ${COLORS.border}`,
+        background: "transparent", color: COLORS.text, fontSize: "14px", fontWeight: 600,
+        cursor: "pointer", marginBottom: "10px",
+      }}>
+        📄 Preview / Save as PDF
+      </button>
+
       <button onClick={async () => {
         if (!confirm(`Delete invoice for ${invoice.customer_name}?`)) return;
         setDeleting(true);
@@ -1031,9 +1048,9 @@ function NewLeadScreen({ onBack, onSave }) {
           <CustomerSelector
             initialName={form.name}
             onSelect={(c) => { if (c) { set("name", c.name); set("phone", c.phone || ""); set("email", c.email || ""); set("address", c.address || ""); setCustomerId(c.id); } else { set("name", ""); setCustomerId(null); } }}
+            onType={(v) => set("name", v)}
             placeholder="Search existing or type new name..."
           />
-          {!form.name && <input style={{ ...inputStyle, marginTop: "8px" }} value={form.name} onChange={e => set("name", e.target.value)} placeholder="Or type name manually *" />}
         </div>
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
@@ -1102,9 +1119,9 @@ function NewJobScreen({ onBack, onSave }) {
           <CustomerSelector
             initialName={form.customer_name}
             onSelect={(c) => { if (c) { set("customer_name", c.name); set("phone", c.phone || ""); set("email", c.email || ""); set("address", c.address || ""); setCustomerId(c.id); } else { set("customer_name", ""); setCustomerId(null); } }}
+            onType={(v) => set("customer_name", v)}
             placeholder="Search existing or type new name..."
           />
-          {!form.customer_name && <input style={{ ...inputStyle, marginTop: "8px" }} value={form.customer_name} onChange={e => set("customer_name", e.target.value)} placeholder="Or type name manually *" />}
         </div>
         <div><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="304-555-0000" /></div>
         <div><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="email@example.com" /></div>
@@ -2469,7 +2486,7 @@ function SettingsScreen() {
 // ============================================================
 // CUSTOMER SELECTOR — search-as-you-type autocomplete
 // ============================================================
-function CustomerSelector({ onSelect, initialName = "", placeholder = "Search existing customers..." }) {
+function CustomerSelector({ onSelect, onType, initialName = "", placeholder = "Search existing customers..." }) {
   const [query, setQuery] = useState(initialName);
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -2489,6 +2506,7 @@ function CustomerSelector({ onSelect, initialName = "", placeholder = "Search ex
 
   const handleChange = (v) => {
     setQuery(v);
+    onType && onType(v);
     clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => doSearch(v), 250);
   };
